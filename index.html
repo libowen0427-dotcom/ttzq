@@ -185,11 +185,11 @@ function updateLB(name,score){
 // ═══════ 足球皮肤 ═══════
 const BALL_SKINS=[
   {id:'classic',name:'经典白球',price:0,effect:'无特殊技能',skill:'',imgKey:'ball_classic'},
-  {id:'fire',name:'火焰足球',price:1,effect:'🔥弹射得分×弹射次数',skill:'fire',imgKey:'ball_fire'},
-  {id:'ice',name:'冰霜足球',price:1,effect:'❄️撞墙冰墙 冰墙弹射×3',skill:'ice',imgKey:'ball_ice'},
-  {id:'lightning',name:'闪电足球',price:2,effect:'⚡弹射减速守门 5次宕机 每3-4发⚡道具×3',skill:'lightning',imgKey:'ball_lightning'},
-  {id:'rainbow',name:'彩虹足球',price:2,effect:'🌈0.5s后同角度追加幽灵球 穿透守门员正常得分',skill:'rainbow',imgKey:'ball_rainbow'},
-  {id:'gem',name:'宝石足球',price:3,effect:'💎两弹生成金币 金币必进',skill:'gem',imgKey:'ball_gem'},
+  {id:'fire',name:'火焰足球',price:5,effect:'🔥弹射得分×弹射次数',skill:'fire',imgKey:'ball_fire'},
+  {id:'ice',name:'冰霜足球',price:5,effect:'❄️碰到墙壁有几率生成一个冰墙',skill:'ice',imgKey:'ball_ice'},
+  {id:'lightning',name:'闪电足球',price:10,effect:'⚡弹射减速守门 5次宕机 每3-4发⚡道具×3',skill:'lightning',imgKey:'ball_lightning'},
+  {id:'rainbow',name:'彩虹足球',price:30,effect:'🌈0.5s后同角度追加幽灵球 穿透守门员正常得分',skill:'rainbow',imgKey:'ball_rainbow'},
+  {id:'gem',name:'宝石足球',price:80,effect:'💎弹射后地图随机出现宝石，碰到宝石后增大进球概率',skill:'gem',imgKey:'ball_gem'},
 ];
 
 // ═══════ 菜单 ═══════
@@ -302,7 +302,7 @@ const hide=id=>document.getElementById(id).style.display='none';
 // ═══════ 游戏引擎 ═══════
 const cv=document.getElementById('c'),ctx=cv.getContext('2d');
 let W,H,gameActive=false,gamePaused=false;
-let score=0,streak=0,level=1,lives=5,bounceCount=0,coinsThisGame=0,nextCoinIdx=0,shotCount=0;
+let score=0,streak=0,level=1,lives=5,bounceCount=0,coinsThisGame=0,shotCount=0;
 let state='idle',wind=0,goalX=0,goalY=0,goalW=200,goalH=110,goalDirX=1,goalVx=0,goalMoving=false;
 let obstacles=[],particles=[],ballTrail=[],shakeAmt=0,shX=0,shY=0;
 let keeperEmotion='idle',keeperEmotionT=0;
@@ -329,13 +329,13 @@ const ball={x:0,y:0,vx:0,vy:0,r:16,active:false,spin:0};
 const drag={on:false,x:0,y:0};
 const sling={x:0,y:0};
 const keeper={x:0,y:0,w:82,h:96,diving:false,diveDir:0,diveT:0,patrolDir:1,speed:0,phase:'patrol'};
-const COIN_MS=[25,50,75,100,125,150,175,200,250,300];
+let coinScoreAccum=0; // 每50分获得1金币
 
 function pauseGame(){gamePaused=true;gameActive=false;}
 function resize(){W=cv.width=cv.offsetWidth;H=cv.height=cv.offsetHeight;}
 function initGame(){
   resize();
-  score=0;streak=0;level=1;lives=5;bounceCount=0;coinsThisGame=0;nextCoinIdx=0;shotCount=0;
+  score=0;streak=0;level=1;lives=5;bounceCount=0;coinsThisGame=0;coinScoreAccum=0;shotCount=0;
   gameActive=true;gamePaused=false;state='idle';
   obstacles=[];particles=[];ballTrail=[];shakeAmt=0;shX=0;shY=0;goalDirX=1;
   keeperEmotion='idle';keeperEmotionT=0;footAlpha=0;legCharging=false;footPwr=0;lastShotLeft=false;teammate=null;
@@ -457,7 +457,7 @@ function spawnGemCoin(){
   const sz=28+Math.random()*14;
   obstacles.push({x:ox,y:oy,w:sz,h:sz,type:'gemcoin',
     ang:0,glowT:1,vx:0,vy:0,hit:false});
-  flash('💎 金币出现！碰它必进！','#ffd700');
+  flash('💎 宝石出现，大大增加进球概率！','#ffd700');
 }
 function spawnLightningPickup(){
   // 闪电道具：与水瓶效果相同（得分×3），随机位置
@@ -512,7 +512,7 @@ function updateWindUI(){
   if(level>=3&&Math.abs(wind)>.0008){el.style.display='block';el.textContent='风 '+(wind>0?'→':'←')+' '+(Math.abs(wind)<.0018?'微风':Math.abs(wind)<.0028?'中风':'强风');}
   else el.style.display='none';
 }
-function checkCoins(){while(nextCoinIdx<COIN_MS.length&&score>=COIN_MS[nextCoinIdx]){awardCoin();nextCoinIdx++;}}
+function checkCoins(){while(score-coinScoreAccum>=50){coinScoreAccum+=50;awardCoin();}}
 function awardCoin(){
   if(!player)return;player.coins++;coinsThisGame++;savePlayer();
   document.getElementById('coin-count').textContent=player.coins;
