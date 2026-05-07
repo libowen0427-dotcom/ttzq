@@ -57,6 +57,17 @@ h1.title{color:#ffd700;font-size:30px;font-weight:900;text-shadow:0 2px 12px #00
 #register-screen{z-index:50;}
 #main-menu{z-index:45;}
 #gameover-screen{z-index:40;}
+#tutorial-overlay{position:absolute;inset:0;z-index:35;pointer-events:none;}
+.tut-box{position:absolute;background:rgba(0,0,0,.82);border:2px solid #ffd700;border-radius:14px;padding:12px 16px;color:#fff;font-size:13px;font-weight:700;max-width:200px;pointer-events:auto;text-align:center;line-height:1.5;}
+.tut-box .tut-title{color:#ffd700;font-size:14px;font-weight:900;margin-bottom:6px;}
+.tut-arrow{position:absolute;width:0;height:0;border:10px solid transparent;}
+.tut-arrow-down{border-top-color:#ffd700;bottom:-21px;left:50%;transform:translateX(-50%);}
+.tut-arrow-up{border-bottom-color:#ffd700;top:-21px;left:50%;transform:translateX(-50%);}
+.tut-arrow-left{border-right-color:#ffd700;left:-21px;top:50%;transform:translateY(-50%);}
+.tut-btn{background:#e85c28;color:#fff;border:none;padding:7px 18px;border-radius:14px;font-size:13px;font-weight:900;cursor:pointer;margin-top:8px;font-family:inherit;}
+.tut-skip{background:rgba(255,255,255,.1);color:rgba(255,255,255,.6);border:none;padding:5px 12px;border-radius:10px;font-size:11px;cursor:pointer;margin-top:5px;font-family:inherit;}
+.tut-highlight{position:absolute;border-radius:50%;border:3px solid #ffd700;animation:tutPulse 1s ease-in-out infinite;pointer-events:none;}
+@keyframes tutPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,215,0,.5)}50%{box-shadow:0 0 0 10px rgba(255,215,0,0)}}
 </style>
 </head>
 <body>
@@ -80,6 +91,8 @@ h1.title{color:#ffd700;font-size:30px;font-weight:900;text-shadow:0 2px 12px #00
 <div id="coin-anim"></div><div id="wind-ui"></div>
 <div id="hint">按住屏幕下半部拖拽瞄准，松手射击</div>
 <div id="power-bar"><div id="power-fill"></div></div>
+
+<div id="tutorial-overlay" style="display:none;"></div>
 
 <div class="ov" id="register-screen" style="display:none;">
   <h1 class="title">⚽ 天天足球</h1>
@@ -171,12 +184,12 @@ function updateLB(name,score){
 
 // ═══════ 足球皮肤 ═══════
 const BALL_SKINS=[
-  {id:'classic',name:'经典白球',price:0,effect:'',imgKey:'ball_classic'},
-  {id:'fire',name:'火焰足球',price:1,effect:'火焰特效',imgKey:'ball_fire'},
-  {id:'ice',name:'冰霜足球',price:1,effect:'减速效果',imgKey:'ball_ice'},
-  {id:'lightning',name:'闪电足球',price:2,effect:'闪电特效',imgKey:'ball_lightning'},
-  {id:'rainbow',name:'彩虹足球',price:2,effect:'炫彩拖尾',imgKey:'ball_rainbow'},
-  {id:'gem',name:'宝石足球',price:3,effect:'稀有皮肤',imgKey:'ball_gem'},
+  {id:'classic',name:'经典白球',price:0,effect:'无特殊技能',skill:'',imgKey:'ball_classic'},
+  {id:'fire',name:'火焰足球',price:1,effect:'🔥弹射得分×弹射次数',skill:'fire',imgKey:'ball_fire'},
+  {id:'ice',name:'冰霜足球',price:1,effect:'❄️撞墙冰墙 冰墙弹射×3',skill:'ice',imgKey:'ball_ice'},
+  {id:'lightning',name:'闪电足球',price:2,effect:'⚡弹射减速守门 5次宕机 每3-4发⚡道具×3',skill:'lightning',imgKey:'ball_lightning'},
+  {id:'rainbow',name:'彩虹足球',price:2,effect:'🌈0.5s后同角度追加幽灵球 穿透守门员正常得分',skill:'rainbow',imgKey:'ball_rainbow'},
+  {id:'gem',name:'宝石足球',price:3,effect:'💎两弹生成金币 金币必进',skill:'gem',imgKey:'ball_gem'},
 ];
 
 // ═══════ 菜单 ═══════
@@ -185,6 +198,72 @@ function register(){
   if(!name){inp.style.borderColor='#f44';return;}
   player={name,bestScore:0,coins:0,ownedBalls:['classic'],activeBall:'classic'};
   savePlayer();hide('register-screen');initGame();
+  // 新用户显示教程
+  setTimeout(()=>startTutorial(),600);
+}
+
+// ═══════ 新手教程 ═══════
+let tutStep=0;
+const TUT_STEPS=[
+  {
+    html:'<div class="tut-title">⚽ 欢迎来到天天足球！</div>按住屏幕<b>下半部</b>，向后拖拽瞄准方向，<b>松手</b>即可射门！',
+    pos:'center',next:'明白了！'
+  },
+  {
+    html:'<div class="tut-title">🪨 石头障碍</div>球碰到<b>石头</b>会弹向球门方向！弹射进球得分 <b>×10</b>！',
+    pos:'top',next:'下一步'
+  },
+  {
+    html:'<div class="tut-title">🍾 加倍道具</div>场上发光的<b>塑料瓶</b>是道具！球碰到后立即消失，本次进球得分 <b>×3</b>！每5-6回合出现一次！',
+    pos:'top',next:'下一步'
+  },
+  {
+    html:'<div class="tut-title">🔥 连击加分</div>连续进球可获得<b>连击加成</b>！墙壁反弹次数越多，得分越高！',
+    pos:'center',next:'开始游戏！'
+  }
+];
+function startTutorial(){
+  if(LS.get('ttfb_tut_done'))return;
+  tutStep=0;showTutStep();
+}
+function showTutStep(){
+  const overlay=document.getElementById('tutorial-overlay');
+  if(tutStep>=TUT_STEPS.length){endTutorial();return;}
+  const step=TUT_STEPS[tutStep];
+  overlay.style.display='block';
+  overlay.innerHTML='';
+  // 半透明遮罩（仅顶部，不遮挡游戏区）
+  const mask=document.createElement('div');
+  mask.style.cssText='position:absolute;inset:0;background:rgba(0,0,0,0.55);';
+  overlay.appendChild(mask);
+  // 提示框
+  const box=document.createElement('div');
+  box.className='tut-box';
+  box.innerHTML=step.html;
+  const btn=document.createElement('button');
+  btn.className='tut-btn';btn.textContent=step.next;
+  btn.onclick=()=>{tutStep++;showTutStep();};
+  box.appendChild(document.createElement('br'));
+  box.appendChild(btn);
+  // 跳过按钮（最后一步不显示）
+  if(tutStep<TUT_STEPS.length-1){
+    const skip=document.createElement('button');
+    skip.className='tut-skip';skip.textContent='跳过教程';
+    skip.onclick=endTutorial;
+    box.appendChild(document.createElement('br'));
+    box.appendChild(skip);
+  }
+  // 定位
+  if(step.pos==='center'){
+    box.style.cssText='left:50%;top:50%;transform:translate(-50%,-50%);max-width:260px;';
+  } else if(step.pos==='top'){
+    box.style.cssText='left:50%;top:32%;transform:translateX(-50%);max-width:260px;';
+  }
+  overlay.appendChild(box);
+}
+function endTutorial(){
+  document.getElementById('tutorial-overlay').style.display='none';
+  LS.set('ttfb_tut_done',true);
 }
 document.getElementById('username-input').onkeydown=e=>{if(e.key==='Enter')register();};
 function openMenu(tab){pauseGame();if(player){document.getElementById('mu-name').textContent=player.name;document.getElementById('mu-best').textContent=player.bestScore;document.getElementById('mu-coins').textContent=player.coins;}show('main-menu');switchTab(tab||'game');}
@@ -230,6 +309,20 @@ let keeperEmotion='idle',keeperEmotionT=0;
 // 脚部动画状态
 let footAlpha=0,footAngle=0,footPwr=0,legCharging=false,lastShotLeft=false;
 let rockBounced=false; // 是否经过石头弹射
+let ballSpeedMult=1.0; // 保留兼容
+let bottleTriple=false; // 本回合是否碰到塑料瓶（得分×3）
+let nextBottleShot=0; // 下次出现塑料瓶的回合
+// ── 技能状态 ──
+let iceWalls=[]; // 冰霜足球：冰墙列表 {x,y,w,h,life(回合数)}
+let iceBouncedThisShot=false; // 本次射击是否碰到冰墙
+let lightningSlowMult=1.0; // 闪电足球：守门员速度减缓倍率
+let lightningBounceCount=0; // 闪电：当次弹射计数（触发减速）
+let lightningCrashed=false; // 闪电：守门员宕机
+let rainbowBall2=null; // 彩虹：第二球状态
+let gemCoinSpawned=false; // 宝石：金币是否已生成
+let bottleUsedThisGame=false; // 保留兼容（不再用）
+let lightningPickupUsed=false; // 保留兼容（不再用）
+let nextLightningPickupShot=0; // 闪电道具下次出现的回合（每3-4发）
 
 const WALL=14,POST=7,POST_H=8,POWER=1.65,MAX_DRAG=90;
 const ball={x:0,y:0,vx:0,vy:0,r:16,active:false,spin:0};
@@ -246,6 +339,11 @@ function initGame(){
   gameActive=true;gamePaused=false;state='idle';
   obstacles=[];particles=[];ballTrail=[];shakeAmt=0;shX=0;shY=0;goalDirX=1;
   keeperEmotion='idle';keeperEmotionT=0;footAlpha=0;legCharging=false;footPwr=0;lastShotLeft=false;teammate=null;
+  ballSpeedMult=1.0;
+  nextBottleShot=4+Math.floor(Math.random()*3);    // 水瓶：4-6发后首次出现
+  nextLightningPickupShot=2+Math.floor(Math.random()*2); // 闪电：2-3发后首次出现
+  iceWalls=[];iceBouncedThisShot=false;lightningSlowMult=1.0;lightningBounceCount=0;lightningCrashed=false;
+  rainbowBall2=null;gemCoinSpawned=false;bottleUsedThisGame=false;lightningPickupUsed=false;
   goalW=Math.min(W*.62,270);goalH=Math.min(H*.26,155);
   goalX=W*.5-goalW/2;goalY=H*.06;
   sling.x=W*.5;sling.y=H*.80;
@@ -256,39 +354,124 @@ function initGame(){
   if(IMGS.scoreBox) document.getElementById('score-bg-img').src=IMGS.scoreBox.src;
   if(IMGS.goalToast) document.getElementById('goal-float-img').src=IMGS.goalToast.src;
   updateHUD();resetBall();resetKeeper();applyLevel();
+  // 初始障碍物由resetBall→spawnObstacles生成
 }
 function resetBall(){
   ball.x=sling.x;ball.y=sling.y;
   ball.vx=0;ball.vy=0;ball.active=false;ball.spin=0;
   ballTrail=[];bounceCount=0;
   if(state!=='gameover')state='idle';
-  drag.on=false;footAlpha=0;legCharging=false;footPwr=0;rockBounced=false;
+  drag.on=false;footAlpha=0;legCharging=false;footPwr=0;rockBounced=false;bottleTriple=false;
+  iceBouncedThisShot=false;lightningBounceCount=0;rainbowBall2=null;
+  // gemCoinSpawned 不在此重置，金币保留到被击中
+  // 激活上一回合留下的 pending 冰墙
+  iceWalls.forEach(iw=>{if(iw.pending)iw.pending=false;});
   sling.x=W*.5;sling.y=H*.80;
   ball.x=sling.x;ball.y=sling.y;
   document.getElementById('power-bar').style.display='none';
   wind=level>=3?(Math.random()-.5)*.003*(level-1.5):0;
   updateWindUI();
+  // 发球前预生成障碍物（每次重置球时重新生成）
+  spawnObstacles();
 }
 function resetKeeper(){
   keeper.x=goalX+goalW/2-keeper.w/2;keeper.y=goalY+goalH-keeper.h;
   keeper.diving=false;keeper.diveDir=0;keeper.diveT=0;
   keeper.patrolDir=Math.random()>.5?1:-1;keeper.speed=1.2+level*.4;keeper.phase='patrol';
+  lightningCrashed=false;lightningSlowMult=1.0;lightningBounceCount=0;
 }
 function applyLevel(){
   goalMoving=level>=2;goalVx=level>=2?Math.min(.40+(level-2)*.25,2.2):0;
-  keeper.speed=1.2+level*.4;obstacles=[];
-  if(level<4)return;
-  const n=Math.min(level-3,5),safe={x:sling.x-90,y:sling.y-170,w:180,h:170};
-  let tries=0;
-  while(obstacles.length<n&&tries++<200){
-    const ox=W*(.18+Math.random()*.64),oy=H*(.32+Math.random()*.28);
-    const sz=26+Math.random()*20;
-    if(ox>safe.x&&ox<safe.x+safe.w&&oy>safe.y&&oy<safe.y+safe.h)continue;
-    if(oy<goalY+goalH+50)continue;
-    // type: 'rock' = 弹向随机方向, 'bottle' = 物理反弹+被弹开
-    obstacles.push({x:ox,y:oy,w:sz,h:sz,type:Math.random()>.5?'rock':'bottle',
-      ang:Math.random()*Math.PI,glowT:0,vx:0,vy:0,hit:false});
+  keeper.speed=1.2+level*.4;
+  // 障碍物由spawnObstacles负责，此处只设移动参数
+}
+function spawnObstacles(){
+  // 每次发球前重新生成障碍物，冰墙和金币跨回合保留
+  // 先保存还没被击中的金币
+  const survivingGemCoin=obstacles.find(o=>o.type==='gemcoin'&&!o.hit)||null;
+  const survivingLightningPickup=obstacles.find(o=>o.type==='lightningpickup'&&!o.hit)||null;
+  obstacles=[];
+  if(level>=4){
+    const n=Math.min(level-3,5),safe={x:sling.x-90,y:sling.y-170,w:180,h:170};
+    let tries=0;
+    while(obstacles.length<n&&tries++<200){
+      const ox=W*(.18+Math.random()*.64),oy=H*(.32+Math.random()*.28);
+      const sz=26+Math.random()*20;
+      if(ox>safe.x&&ox<safe.x+safe.w&&oy>safe.y&&oy<safe.y+safe.h)continue;
+      if(oy<goalY+goalH+50)continue;
+      obstacles.push({x:ox,y:oy,w:sz,h:sz,type:'rock',
+        ang:Math.random()*Math.PI,glowT:0,vx:0,vy:0,hit:false});
+    }
   }
+  // 宝石足球：恢复未被击中的金币，或者（进球有弹射后）生成新金币
+  if((player?.activeBall||'classic')==='gem'){
+    if(survivingGemCoin){
+      obstacles.push(survivingGemCoin); // 还没被碰到的金币保留
+    } else if(!gemCoinSpawned&&shotCount>0){
+      spawnGemCoin(); // 上轮进球有弹射，生成新金币
+    }
+  }
+  // 恢复未被拾取的闪电道具
+  if(survivingLightningPickup)obstacles.push(survivingLightningPickup);
+  // 塑料瓶：每4-6发出一个（场上最多同时1个）
+  const bottleOnField=obstacles.some(o=>o.type==='bottle'&&o.isPowerup&&!o.hit);
+  if(!bottleOnField && shotCount>=nextBottleShot){
+    spawnBottlePowerup();
+    nextBottleShot=shotCount+4+Math.floor(Math.random()*3); // 下次：再过4-6发
+  }
+  // 闪电道具：仅限闪电足球，每3-4发出一个（场上最多同时1个）
+  if((player?.activeBall||'classic')==='lightning'){
+    const lightningOnField=obstacles.some(o=>o.type==='lightningpickup'&&!o.hit);
+    if(!lightningOnField && shotCount>=nextLightningPickupShot){
+      spawnLightningPickup();
+      nextLightningPickupShot=shotCount+2+Math.floor(Math.random()*2); // 下次：再过2-3发
+    }
+  }
+  // 冰墙：跨回合保留，只有已激活的冰墙才减寿
+  iceWalls=iceWalls.filter(w=>w.life>0);
+  iceWalls.forEach(w=>{if(!w.pending)w.life--;});
+}
+function spawnBottlePowerup(){
+  const safe={x:sling.x-90,y:sling.y-170,w:180,h:170};
+  let tries=0,ox,oy;
+  do{
+    ox=W*(.15+Math.random()*.7);
+    oy=H*(.28+Math.random()*.38);
+    tries++;
+  }while(tries<100&&((ox>safe.x&&ox<safe.x+safe.w&&oy>safe.y&&oy<safe.y+safe.h)||oy<goalY+goalH+50));
+  const sz=30+Math.random()*14;
+  obstacles.push({x:ox,y:oy,w:sz,h:sz,type:'bottle',
+    ang:Math.random()*Math.PI*2,glowT:0.6,vx:0,vy:0,hit:false,isPowerup:true});
+}
+function spawnGemCoin(){
+  // 宝石足球：生成必进金币（功能同石头，但弹射后必定朝向球门）
+  if(gemCoinSpawned)return;
+  gemCoinSpawned=true;
+  const safe={x:sling.x-90,y:sling.y-170,w:180,h:170};
+  let tries=0,ox,oy;
+  do{
+    ox=W*(.18+Math.random()*.64);
+    oy=H*(.30+Math.random()*.30);
+    tries++;
+  }while(tries<100&&((ox>safe.x&&ox<safe.x+safe.w&&oy>safe.y&&oy<safe.y+safe.h)||oy<goalY+goalH+40));
+  const sz=28+Math.random()*14;
+  obstacles.push({x:ox,y:oy,w:sz,h:sz,type:'gemcoin',
+    ang:0,glowT:1,vx:0,vy:0,hit:false});
+  flash('💎 金币出现！碰它必进！','#ffd700');
+}
+function spawnLightningPickup(){
+  // 闪电道具：与水瓶效果相同（得分×3），随机位置
+  const safe={x:sling.x-90,y:sling.y-170,w:180,h:170};
+  let tries=0,ox,oy;
+  do{
+    ox=W*(.12+Math.random()*.76);
+    oy=H*(.22+Math.random()*.50);
+    tries++;
+  }while(tries<100&&((ox>safe.x&&ox<safe.x+safe.w&&oy>safe.y&&oy<safe.y+safe.h)||oy<goalY+goalH+40));
+  const sz=28+Math.random()*10;
+  obstacles.push({x:ox,y:oy,w:sz,h:sz,type:'lightningpickup',
+    ang:0,glowT:1,vx:0,vy:0,hit:false});
+  flash('⚡ 闪电道具出现！触碰得分×3！','#ffe566');
 }
 
 // 队友系统
@@ -347,17 +530,17 @@ function motiv(txt){
   el.style.cssText='opacity:1;transform:translateX(-50%) scale(1.1);transition:none;';
   setTimeout(()=>{el.style.cssText='opacity:0;transform:translateX(-50%) translateY(-28px);transition:opacity .6s,transform .6s;';},1100);
 }
-function showPtsFloat(bx,by,pts,bounces,rock){
+function showPtsFloat(bx,by,pts,bounces,rock,bottle){
   const el=document.getElementById('pts-float');
   const r=cv.getBoundingClientRect();
-  const col=rock?'#ff8800':pts>=32?'#ff44ff':pts>=8?'#ffd700':'#7fffaa';
+  const col=bottle?'#44ffff':rock?'#ff8800':pts>=32?'#ff44ff':pts>=8?'#ffd700':'#7fffaa';
   const sz=pts>=32?52:pts>=8?40:30;
   let label='';
+  if(bottle)label+='🍾<span style="color:#44ffff;font-size:20px;">×3</span>  ';
   if(rock)label+='🪨';
   if(bounces>0)label+='<span style="color:'+col+'">弹射×'+bounces+'</span>  ';
   label+='<span style="font-size:'+sz+'px;color:'+col+'">'+pts+'</span>';
   el.innerHTML=label;
-  // 固定显示在屏幕中央偏上
   el.style.cssText=`left:${r.left+r.width/2}px;top:${r.top+r.height*0.38}px;transform:translate(-50%,-50%) scale(0.4);opacity:1;transition:none;text-shadow:0 2px 14px #000,0 0 30px ${col};font-weight:900;white-space:nowrap;`;
   requestAnimationFrame(()=>{
     el.style.transition='transform .35s cubic-bezier(.34,1.56,.64,1),opacity .5s .6s';
@@ -376,6 +559,7 @@ const TRICK_MSG=['弹射大师！','物理学家！','精妙弧线！','完美�
 function showStreakMotiv(s){const keys=Object.keys(STREAK_MSG).map(Number).filter(k=>k<=s).sort((a,b)=>b-a);if(!keys.length)return;motiv(STREAK_MSG[keys[0]][0]);}
 function setKeeperEmotion(e,dur){keeperEmotion=e;keeperEmotionT=dur;}
 function onGoal(){
+  const skin=player?.activeBall||'classic';
   const bonus=Math.min(bounceCount,6);
   let pts;
   if(rockBounced){
@@ -385,6 +569,15 @@ function onGoal(){
     pts=Math.pow(2,Math.min(bounceCount,5));
     pts=Math.min(pts,64);
   }
+  // 🔥 火焰足球：每弹射一次得分×2（连乘，弹N次 = ×2^N）
+  if(skin==='fire'&&bounceCount>0){
+    pts=Math.min(pts*Math.pow(2,bounceCount),9999);
+    flash('🔥 火焰连击！×'+Math.pow(2,bounceCount),'#ff6600');
+  }
+  // ❄️ 冰霜足球：从冰墙弹射后得分×3
+  if(skin==='ice'&&iceBouncedThisShot){pts=Math.min(pts*3,9999);}
+  // 🍾 塑料瓶道具：得分×3
+  if(bottleTriple){pts=Math.min(pts*3,9999);}
   score+=pts;streak++;state='scored';shakeAmt=18+Math.min(bonus,4)*4;
   addStars(ball.x,ball.y);
   addBurst(ball.x,ball.y,'#ffd700',30+bonus*5,6+bonus);
@@ -393,10 +586,14 @@ function onGoal(){
   const sn=document.getElementById('score-num');
   sn.textContent=score;sn.classList.remove('pop');void sn.offsetWidth;sn.classList.add('pop');
   showGoalImg(ball.x,ball.y);
-  showPtsFloat(ball.x,ball.y,pts,bounceCount,rockBounced);
+  showPtsFloat(ball.x,ball.y,pts,bounceCount,rockBounced,bottleTriple||(skin==='ice'&&iceBouncedThisShot));
   if(streak>=2){const sk=document.getElementById('streak-box');sk.textContent='🔥x'+streak;sk.style.transform='scale(1.6)';setTimeout(()=>{sk.style.cssText='transform:scale(1);transition:transform .2s;';},300);setTimeout(()=>showStreakMotiv(streak),420);}
   if(player){checkCoins();if(score>player.bestScore){player.bestScore=score;savePlayer();}}
   setKeeperEmotion(bonus>0?'dizzy':'angry',2000);
+  // 宝石足球：只要有弹射进球，下一发球时生成金币
+  if((player?.activeBall||'classic')==='gem'&&bounceCount>0){
+    gemCoinSpawned=false; // 允许下一发球生成金币
+  }
   setTimeout(()=>{resetBall();resetKeeper();},1600);
 }
 function onMiss(){
@@ -439,8 +636,17 @@ function inputUp(){
   drag.on=false;document.getElementById('power-bar').style.display='none';legCharging=false;
   const dx=sling.x-drag.x,dy=sling.y-drag.y,pwr=Math.hypot(dx,dy)/MAX_DRAG;
   if(pwr<.06){state='idle';footPwr=0;return;}
-  ball.vx=dx/MAX_DRAG*pwr*21*POWER;ball.vy=dy/MAX_DRAG*pwr*21*POWER;
+  ball.vx=dx/MAX_DRAG*pwr*21*POWER*ballSpeedMult;ball.vy=dy/MAX_DRAG*pwr*21*POWER*ballSpeedMult;
   ball.active=true;ball.spin=ball.vx*.22;state='flying';keeper.phase='tracking';
+  // 🌈 彩虹足球：0.3秒后同角度同速度射出第二球
+  if((player?.activeBall||'classic')==='rainbow'){
+    const vx2=ball.vx,vy2=ball.vy;
+    const sx2=sling.x,sy2=sling.y;
+    setTimeout(()=>{
+      if(state==='flying'||state==='scored'||state==='miss')
+        rainbowBall2={x:sx2,y:sy2,vx:vx2,vy:vy2,spin:0,active:true,trail:[]};
+    },300);
+  }
   // 队友持球时继承之前的弹射次数，否则重置
   if(teammate&&teammate.active&&teammate.hasball){
     bounceCount=teammate.savedBounce||0;
@@ -491,10 +697,12 @@ function keeperHitbox(){
 }
 function updateKeeper(dt){
   if(keeperEmotionT>0){keeperEmotionT-=dt;if(keeperEmotionT<=0){keeperEmotion='idle';keeperEmotionT=0;}}
+  if(lightningCrashed)return; // 宕机：守门员停止
   if(keeper.diving){keeper.diveT=Math.min(keeper.diveT+dt*.003,1);if(keeper.diveT>=1){keeper.diving=false;keeper.phase='patrol';}return;}
   const L=goalX+6,R=goalX+goalW-keeper.w-6;
-  if(state==='flying'&&keeper.phase==='tracking'){const tgt=Math.max(L,Math.min(R,ball.x-keeper.w/2)),diff=tgt-keeper.x;keeper.x+=Math.sign(diff)*Math.min(keeper.speed*dt*.13,Math.abs(diff));}
-  else{keeper.x+=keeper.patrolDir*keeper.speed*dt*.055;if(keeper.x<=L){keeper.x=L;keeper.patrolDir=1;}if(keeper.x>=R){keeper.x=R;keeper.patrolDir=-1;}}
+  const spd=keeper.speed*lightningSlowMult;
+  if(state==='flying'&&keeper.phase==='tracking'){const tgt=Math.max(L,Math.min(R,ball.x-keeper.w/2)),diff=tgt-keeper.x;keeper.x+=Math.sign(diff)*Math.min(spd*dt*.13,Math.abs(diff));}
+  else{keeper.x+=keeper.patrolDir*spd*dt*.055;if(keeper.x<=L){keeper.x=L;keeper.patrolDir=1;}if(keeper.x>=R){keeper.x=R;keeper.patrolDir=-1;}}
   keeper.x=Math.max(L,Math.min(R,keeper.x));keeper.y=goalY+goalH-keeper.h;
 }
 function update(dt){
@@ -502,85 +710,190 @@ function update(dt){
   if(shakeAmt>0){shakeAmt-=dt*.1;shX=(Math.random()-.5)*shakeAmt;shY=(Math.random()-.5)*shakeAmt;if(shakeAmt<0){shakeAmt=0;shX=shY=0;}}
   if(goalMoving&&state!=='scored'){goalX+=goalVx*goalDirX*dt*.055;if(goalX<W*.04){goalX=W*.04;goalDirX=1;}if(goalX+goalW>W*.96){goalX=W*.96-goalW;goalDirX=-1;}}
   if(footAlpha>0)footAlpha=Math.max(0,footAlpha-dt*.005);
+
+  const activeSkin=player?.activeBall||'classic';
+
+  // ── 彩虹足球：第二球物理更新 ──
+  if(rainbowBall2&&rainbowBall2.active){
+    rainbowBall2.vy+=.32;rainbowBall2.vx+=wind*dt;
+    rainbowBall2.x+=rainbowBall2.vx;rainbowBall2.y+=rainbowBall2.vy;
+    rainbowBall2.spin+=rainbowBall2.vx*.04;
+    // 彩虹轨迹
+    if(!rainbowBall2.trail)rainbowBall2.trail=[];
+    if(rainbowBall2.trail.length>20)rainbowBall2.trail.shift();
+    rainbowBall2.trail.push({x:rainbowBall2.x,y:rainbowBall2.y});
+    if(rainbowBall2.x-ball.r<=WALL){rainbowBall2.x=WALL+ball.r;rainbowBall2.vx=Math.abs(rainbowBall2.vx)*.86;}
+    if(rainbowBall2.x+ball.r>=W-WALL){rainbowBall2.x=W-WALL-ball.r;rainbowBall2.vx=-Math.abs(rainbowBall2.vx)*.86;}
+    if(rainbowBall2.y>H+60||rainbowBall2.y+ball.r<0){rainbowBall2.active=false;}
+    // 第二球：可被守门员拦截，正常计分
+    if(insideNet2(rainbowBall2)){
+      rainbowBall2.active=false;
+      const kh=keeperHitbox();
+      if(!lightningCrashed&&circRect(rainbowBall2.x,rainbowBall2.y,ball.r,kh.x,kh.y,kh.w,kh.h)){
+        addBurst(rainbowBall2.x,rainbowBall2.y,'#ff4455',10,4);
+        flash('🌈 幽灵球被拦截！','#ff8888');
+      } else {
+        const skin2=player?.activeBall||'classic';
+        let pts2;
+        if(rockBounced){pts2=Math.min(Math.pow(2,Math.min(bounceCount,5))*10,999);}
+        else{pts2=Math.min(Math.pow(2,Math.min(bounceCount,5)),64);}
+        if(skin2==='fire'&&bounceCount>0)pts2=Math.min(pts2*Math.pow(2,bounceCount),9999);
+        if(skin2==='ice'&&iceBouncedThisShot)pts2=Math.min(pts2*3,9999);
+        if(bottleTriple)pts2=Math.min(pts2*3,9999);
+        score+=pts2;streak++;
+        const sn=document.getElementById('score-num');sn.textContent=score;
+        sn.classList.remove('pop');void sn.offsetWidth;sn.classList.add('pop');
+        addStars(rainbowBall2.x,rainbowBall2.y);
+        addBurst(rainbowBall2.x,rainbowBall2.y,'#ff88ff',24,7);
+        addBurst(rainbowBall2.x,rainbowBall2.y,'#ffd700',12,5);
+        showPtsFloat(rainbowBall2.x,rainbowBall2.y,pts2,bounceCount,rockBounced,bottleTriple);
+        if(player){checkCoins();if(score>player.bestScore){player.bestScore=score;savePlayer();}}
+        motiv('🌈 幽灵球进网！');
+      }
+    }
+  }
+
   if(ball.active&&(state==='flying'||state==='teammate_shot')){state='flying';
     ball.vy+=.32;ball.vx+=wind*dt;ball.x+=ball.vx;ball.y+=ball.vy;ball.spin+=ball.vx*.04;
     if(ballTrail.length>16)ballTrail.shift();ballTrail.push({x:ball.x,y:ball.y,spd:Math.hypot(ball.vx,ball.vy)});
-    if(ball.x-ball.r<=WALL){ball.x=WALL+ball.r;ball.vx=Math.abs(ball.vx)*.86;ball.spin*=-.5;wallSpark(WALL+ball.r,ball.y,1);shakeAmt=3;bounceCount++;flash('墙壁反弹！','rgba(100,220,255,.95)');}
-    if(ball.x+ball.r>=W-WALL){ball.x=W-WALL-ball.r;ball.vx=-Math.abs(ball.vx)*.86;ball.spin*=-.5;wallSpark(W-WALL-ball.r,ball.y,-1);shakeAmt=3;bounceCount++;}
+
+    // ── 墙壁碰撞 ──
+    if(ball.x-ball.r<=WALL){
+      ball.x=WALL+ball.r;ball.vx=Math.abs(ball.vx)*.86;ball.spin*=-.5;
+      wallSpark(WALL+ball.r,ball.y,1);shakeAmt=3;bounceCount++;
+      flash('墙壁反弹！','rgba(100,220,255,.95)');
+      onWallBounce(ball.x,ball.y); // 冰球：标记冰墙
+      checkIceWallBonus(true,ball.y); // 冰球：检查此墙有无冰墙加成
+      onBounce();
+    }
+    if(ball.x+ball.r>=W-WALL){
+      ball.x=W-WALL-ball.r;ball.vx=-Math.abs(ball.vx)*.86;ball.spin*=-.5;
+      wallSpark(W-WALL-ball.r,ball.y,-1);shakeAmt=3;bounceCount++;
+      onWallBounce(ball.x,ball.y);
+      checkIceWallBonus(false,ball.y);
+      onBounce();
+    }
+
     if(ball.y+ball.r<0){onMiss();return;}
     if(ball.y<goalY+goalH+ball.r*2)checkPosts();
-    if(insideNet()){const kh=keeperHitbox();if(circRect(ball.x,ball.y,ball.r,kh.x,kh.y,kh.w,kh.h)){ball.vx=-ball.vx*.4;ball.vy=-Math.abs(ball.vy)*.3;onKeeperSave();}else onGoal();return;}
+    if(insideNet()){
+      const kh=keeperHitbox();
+      if(!lightningCrashed&&circRect(ball.x,ball.y,ball.r,kh.x,kh.y,kh.w,kh.h)){
+        ball.vx=-ball.vx*.4;ball.vy=-Math.abs(ball.vy)*.3;onKeeperSave();
+      } else {
+        onGoal();
+      }
+      return;
+    }
+
+    // ── 障碍物碰撞 ──
     for(const o of (obstacles||[])){
-      if(!o.hit&&circRect(ball.x,ball.y,ball.r,o.x-o.w/2,o.y-o.h/2,o.w,o.h)){
-        if(o.type==='rock'){
-          // 石头：弹向随机方向（随机角度，保持速度大小）
-          const spd=Math.hypot(ball.vx,ball.vy);
-          const randomAng=Math.random()*Math.PI*2;
-          // 偏向上方（朝球门）
-          const upBias=-Math.PI/2+((Math.random()-.5)*Math.PI*.8);
-          ball.vx=Math.cos(upBias)*spd*.9;
-          ball.vy=Math.sin(upBias)*spd*.9;
-          o.glowT=1;bounceCount++;
-          addBurst(ball.x,ball.y,'#aaa',10,4);addBurst(ball.x,ball.y,'#fff',4,5);
-          shakeAmt=6;rockBounced=true;flash('岩石弹射！x10！','#ff8800');
-        } else {
-          // 台球物理：按法向量精确反弹，瓶获得动量
-          const nx=ball.x-o.x, ny=ball.y-o.y;
-          const nlen=Math.hypot(nx,ny)||1;
-          const nx2=nx/nlen, ny2=ny/nlen;
-          const dot=ball.vx*nx2+ball.vy*ny2;
-          ball.vx=(ball.vx-2*dot*nx2)*0.82;
-          ball.vy=(ball.vy-2*dot*ny2)*0.82;
-          ball.x=o.x+nx2*(ball.r+o.w/2+2);
-          ball.y=o.y+ny2*(ball.r+o.h/2+2);
-          o.vx=-nx2*Math.abs(dot)*1.4+(Math.random()-.5)*0.4;
-          o.vy=-ny2*Math.abs(dot)*1.4+(Math.random()-.5)*0.4;
-          o.hit=true;
-          o.glowT=1;bounceCount++;
-          addBurst(ball.x,ball.y,'#44aaff',12,4);addBurst(o.x,o.y,'#fff',5,5);
-          shakeAmt=5;flash('台球一击！','#44ddff');
-        }
+      if(o.hit)continue;
+      if(!circRect(ball.x,ball.y,ball.r,o.x-o.w/2,o.y-o.h/2,o.w,o.h))continue;
+
+      if(o.type==='rock'){
+        const spd=Math.hypot(ball.vx,ball.vy);
+        const upBias=-Math.PI/2+((Math.random()-.5)*Math.PI*.8);
+        ball.vx=Math.cos(upBias)*spd*.9;ball.vy=Math.sin(upBias)*spd*.9;
+        o.glowT=1;bounceCount++;
+        addBurst(ball.x,ball.y,'#aaa',10,4);addBurst(ball.x,ball.y,'#fff',4,5);
+        shakeAmt=6;rockBounced=true;flash('岩石弹射！x10！','#ff8800');
+        o.hit=true;
+        onBounce();
+      } else if(o.type==='gemcoin'){
+        // 宝石金币：朝球门方向弹射
+        const spd=Math.hypot(ball.vx,ball.vy);
+        const goalCenterX=goalX+goalW/2;
+        const ang=Math.atan2(goalY+goalH/2-ball.y, goalCenterX-ball.x);
+        const spread=(Math.random()-.5)*0.3;
+        ball.vx=Math.cos(ang+spread)*spd*.95;ball.vy=Math.sin(ang+spread)*spd*.95;
+        o.glowT=1;bounceCount++;rockBounced=true;
+        addBurst(ball.x,ball.y,'#ffd700',14,5);addBurst(ball.x,ball.y,'#fff',6,6);
+        shakeAmt=7;flash('💎 金币弹射！必进！','#ffd700');motiv('💎 黄金一击！');
+        o.hit=true;onBounce();
+      } else if(o.type==='lightningpickup'){
+        // 闪电道具：效果与水瓶相同，得分×3，立即消失
+        o.hit=true;bottleTriple=true;
+        addBurst(ball.x,ball.y,'#ffe566',16,5);addBurst(ball.x,ball.y,'#ffffff',8,7);addBurst(ball.x,ball.y,'#ffff00',12,6);
+        shakeAmt=5;flash('⚡ 闪电道具！得分 ×3！','#ffe566');motiv('⚡ ×3 加倍！');
+        bounceCount++;onBounce();
+      } else if(o.type==='bottle'&&o.isPowerup){
+        o.hit=true;bottleTriple=true;
+        addBurst(ball.x,ball.y,'#44aaff',16,5);addBurst(ball.x,ball.y,'#ffffff',8,7);addBurst(ball.x,ball.y,'#ffd700',12,6);
+        shakeAmt=5;flash('🍾 塑料瓶！得分 ×3！','#44ffff');motiv('🍾 ×3 加倍！');
+        bounceCount++;onBounce();
       }
     }
+
     // 检查传给队友
     if(teammate&&teammate.active&&!teammate.hasball){
       if(circRect(ball.x,ball.y,ball.r,teammate.x-teammate.w/2,teammate.y-teammate.h*.8,teammate.w,teammate.h)){
-        teammate.hasball=true;
-        teammate.savedBounce=bounceCount;  // 保存已累积的弹射次数
-        teammate.savedRock=rockBounced;
+        teammate.hasball=true;teammate.savedBounce=bounceCount;teammate.savedRock=rockBounced;
         ball.active=false;ball.vx=0;ball.vy=0;
         sling.x=teammate.x;sling.y=teammate.y-teammate.h*.3;
-        ball.x=sling.x;ball.y=sling.y;
-        state='idle';
+        ball.x=sling.x;ball.y=sling.y;state='idle';
         flash('队友接球！拖拽继续射门！','#7fffaa');
       }
     }
     if(ball.y>H+60)onMiss();
   }
   updateKeeper(dt);
-  // 移动被打飞的塑料瓶
+  // 被打飞的瓶子（兼容旧逻辑，已无普通瓶，保留安全）
   for(const o of (obstacles||[])){
     if(o.glowT>0)o.glowT=Math.max(0,o.glowT-dt*.003);
-    if(o.hit&&o.type==='bottle'){
-      o.x+=o.vx*dt*.06; o.y+=o.vy*dt*.06;
-      o.vx*=0.94; o.vy*=0.94;
-      o.ang+=Math.hypot(o.vx,o.vy)*0.03;
-      // 限制范围：球筐底部 ~ 足球当前位置上方
-      const yMin=goalY+goalH+o.h/2;
-      const yMax=ball.active?Math.min(ball.y-ball.r-o.h/2, sling.y-o.h/2):sling.y-o.h/2;
-      if(o.y<yMin){o.y=yMin;o.vy=Math.abs(o.vy)*0.6;}
-      if(o.y>yMax){o.y=yMax;o.vy=-Math.abs(o.vy)*0.6;}
-      if(o.x<WALL+o.w/2){o.x=WALL+o.w/2;o.vx=Math.abs(o.vx)*0.75;}
-      if(o.x>W-WALL-o.w/2){o.x=W-WALL-o.w/2;o.vx=-Math.abs(o.vx)*0.75;}
-    }
   }
-  // 队友持球时玩家射出后清除队友
   if(teammate&&teammate.active&&teammate.hasball&&state==='flying'){
     teammate.hasball=false;teammate.active=false;teammate=null;
   }
   checkTeammateSpawn();
   for(let i=(particles||[]).length-1;i>=0;i--){const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.vy+=p.g;p.vx*=.96;p.life-=.022;if(p.life<=0)particles.splice(i,1);}
 }
+
+// ── 碰撞发生后的技能响应 ──
+function onBounce(){
+  const skin=player?.activeBall||'classic';
+  // 闪电足球：每次弹射减缓守门员
+  if(skin==='lightning'){
+    lightningBounceCount++;
+    if(lightningBounceCount>=5&&!lightningCrashed){
+      lightningCrashed=true;setKeeperEmotion('dizzy',99999);
+      flash('⚡ 守门员宕机！','#ffe566');motiv('⚡ 系统崩溃！');
+    } else if(lightningBounceCount<5){
+      lightningSlowMult=Math.max(0.05,1.0-lightningBounceCount*0.2);
+      flash('⚡ 守门员减速！×'+lightningBounceCount,'#ffe566');
+    }
+  }
+}
+// 撞墙回调（冰霜生成冰墙标记）- 本次撞墙留下冰墙视觉标记，下一发球才生效
+function onWallBounce(wx,wy){
+  if((player?.activeBall||'classic')!=='ice')return;
+  if(state!=='flying')return;
+  const wallH=ball.r*2*1.5; // 冰墙视觉长度（竖向）= 球直径×1.5
+  // 检查是否已有近处冰墙
+  for(const iw of iceWalls){if(Math.abs(iw.y-wy)<wallH*0.8)return;}
+  const isLeftWall=(wx<=WALL+ball.r+4);
+  // x 紧贴对应墙壁边界，w 设为 0（不参与碰撞，仅视觉）
+  const wallX=isLeftWall?WALL:W-WALL;
+  iceWalls.push({x:wallX,y:wy-wallH/2,w:0,h:wallH,isLeft:isLeftWall,life:4,pending:true});
+  addBurst(wx,wy,'#aaffff',10,3);flash('❄️ 冰墙已标记！下次发球有效','#aaffff');
+}
+// 球撞墙时检查该墙是否有冰墙标记（×3加成）
+function checkIceWallBonus(isLeft,ballY){
+  if((player?.activeBall||'classic')!=='ice')return;
+  for(const iw of iceWalls){
+    if(iw.pending)continue;
+    if(iw.isLeft!==isLeft)continue; // 只匹配同侧墙
+    if(ballY>=iw.y&&ballY<=iw.y+iw.h){
+      if(!iceBouncedThisShot){
+        iceBouncedThisShot=true;
+        addBurst(isLeft?WALL+ball.r:W-WALL-ball.r,ballY,'#aaffff',14,4);
+        flash('❄️ 冰墙加成！×3！','#aaffff');
+      }
+      break;
+    }
+  }
+}
+function insideNet2(b2){return b2.x>goalX+POST&&b2.x<goalX+goalW-POST&&b2.y>goalY+POST_H&&b2.y<goalY+goalH;}
 
 // ── 绘制 ──
 function drawBG(){
@@ -592,37 +905,108 @@ function drawGoal(){
   else{ctx.strokeStyle='#fff';ctx.lineWidth=POST*2;ctx.lineCap='square';ctx.beginPath();ctx.moveTo(goalX,goalY+goalH);ctx.lineTo(goalX,goalY);ctx.lineTo(goalX+goalW,goalY);ctx.lineTo(goalX+goalW,goalY+goalH);ctx.stroke();}
 }
 function drawKeeper(){
-  let img=keeperEmotion==='dizzy'&&IMGS.robotDizzy?IMGS.robotDizzy:keeperEmotion==='angry'&&IMGS.robotAngry?IMGS.robotAngry:(keeper.diving||keeperEmotion==='dive')&&IMGS.robotDive?IMGS.robotDive:IMGS.robotIdle||null;
+  let img=lightningCrashed&&IMGS.robotDizzy?IMGS.robotDizzy:keeperEmotion==='dizzy'&&IMGS.robotDizzy?IMGS.robotDizzy:keeperEmotion==='angry'&&IMGS.robotAngry?IMGS.robotAngry:(keeper.diving||keeperEmotion==='dive')&&IMGS.robotDive?IMGS.robotDive:IMGS.robotIdle||null;
   if(!img)return;
   ctx.save();
+  if(lightningCrashed){
+    // 宕机：闪烁+蓝色滤镜
+    const flicker=Math.sin(Date.now()*.03)>.2;
+    ctx.globalAlpha=flicker?.7:.4;
+    ctx.filter='hue-rotate(180deg) brightness(1.5)';
+  }
   if(keeper.diving){ctx.translate(keeper.x+keeper.w/2,keeper.y+keeper.h/2);ctx.rotate(keeper.diveDir*keeper.diveT*0.4);ctx.drawImage(img,-keeper.w/2,-keeper.h/2,keeper.w,keeper.h);}
   else ctx.drawImage(img,keeper.x,keeper.y,keeper.w,keeper.h);
+  if(lightningCrashed){
+    ctx.filter='none';
+    ctx.globalAlpha=1;
+    ctx.fillStyle='#ffe566';ctx.font='bold 16px Arial';ctx.textAlign='center';
+    ctx.fillText('⚡💀⚡',keeper.x+keeper.w/2,keeper.y-8);
+  }
   ctx.restore();
 }
 function drawObstacles(){
   if(!obstacles)return;
-  for(const o of obstacles){
-    ctx.save();ctx.translate(o.x,o.y);ctx.rotate(o.ang);
-    // 发光效果
-    if(o.glowT>0){
-      ctx.save();ctx.globalAlpha=o.glowT*.6;
-      ctx.shadowColor=o.type==='rock'?'#ffcc44':'#44aaff';
-      ctx.shadowBlur=18+o.glowT*12;
-      ctx.restore();
-    }
-    const sz=o.w;
-    if(o.type==='rock'&&IMGS.rockImg){
-      ctx.globalAlpha=1;
-      ctx.drawImage(IMGS.rockImg,-sz/2,-sz/2,sz,sz);
-    } else if(o.type==='bottle'&&IMGS.bottleImg){
-      ctx.globalAlpha=1;
-      ctx.drawImage(IMGS.bottleImg,-sz*0.75,-sz*0.45,sz*1.5,sz*0.9);
-    } else {
-      // fallback
-      if(o.type==='rock'){ctx.fillStyle='#7a7a7a';ctx.beginPath();ctx.ellipse(0,0,sz/2,sz/2,0,0,Math.PI*2);ctx.fill();}
-      else{ctx.fillStyle='#44aaff';ctx.fillRect(-sz/2,-sz/3,sz,sz*.65);}
+  // 先画冰墙（视觉标记，紧贴侧墙）
+  for(const iw of iceWalls){
+    if(iw.life<=0)continue;
+    const alpha=iw.pending?0.3:Math.min(1,iw.life/4)*0.9;
+    const wallH=iw.h;
+    const cx=iw.isLeft?(WALL+4):(W-WALL-4); // 冰柱中心X，紧贴墙面
+    const icicleW=8+ball.r*0.4; // 冰柱宽度（向场内突出）
+    const x0=iw.isLeft?WALL:(W-WALL-icicleW);
+    ctx.save();
+    ctx.globalAlpha=alpha;
+    ctx.shadowColor='#00ffff';ctx.shadowBlur=iw.pending?4:12;
+    // 冰柱主体
+    const grad=ctx.createLinearGradient(x0,iw.y,x0+icicleW,iw.y);
+    grad.addColorStop(0,iw.isLeft?'#aaffff':'rgba(170,255,255,0.1)');
+    grad.addColorStop(1,iw.isLeft?'rgba(170,255,255,0.1)':'#aaffff');
+    ctx.fillStyle=iw.pending?'rgba(136,204,204,0.4)':grad;
+    if(iw.pending)ctx.setLineDash([4,4]);
+    ctx.fillRect(x0,iw.y,icicleW,wallH);
+    ctx.setLineDash([]);
+    // 边框
+    ctx.strokeStyle='rgba(200,255,255,0.6)';ctx.lineWidth=1.5;
+    ctx.strokeRect(x0,iw.y,icicleW,wallH);
+    ctx.shadowBlur=0;
+    // 剩余回合数（非pending）
+    if(!iw.pending){
+      ctx.fillStyle='#003366';ctx.font='bold 9px Arial';
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(iw.life,x0+icicleW/2,iw.y+wallH/2);
     }
     ctx.restore();
+  }
+  for(const o of obstacles){
+    if(o.hit)continue;
+    ctx.save();ctx.translate(o.x,o.y);ctx.rotate(o.ang);
+    const sz=o.w;
+    if(o.type==='rock'&&IMGS.rockImg){
+      ctx.globalAlpha=1;ctx.drawImage(IMGS.rockImg,-sz/2,-sz/2,sz,sz);
+    } else if(o.type==='bottle'&&IMGS.bottleImg){
+      ctx.globalAlpha=1;ctx.drawImage(IMGS.bottleImg,-sz*0.75,-sz*0.45,sz*1.5,sz*0.9);
+    } else if(o.type==='lightningpickup'){
+      // 闪电道具：黄色放射光晕
+      ctx.globalAlpha=1;
+      const pulse=Math.sin(Date.now()*.008)*.4+.6;
+      ctx.shadowColor='#ffe566';ctx.shadowBlur=20+pulse*12;
+      ctx.fillStyle='#ffe566';ctx.beginPath();ctx.arc(0,0,sz/2,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='#ff8800';ctx.lineWidth=3;ctx.stroke();
+      ctx.shadowBlur=0;ctx.font=`bold ${Math.round(sz*.7)}px Arial`;
+      ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('⚡',0,2);
+    } else if(o.type==='gemcoin'){
+      // 金币：金色发光圆形
+      ctx.globalAlpha=1;
+      const pulse=Math.sin(Date.now()*.006)*.3+.7;
+      ctx.shadowColor='#ffd700';ctx.shadowBlur=18+pulse*10;
+      ctx.fillStyle='#ffd700';ctx.beginPath();ctx.arc(0,0,sz/2,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='#ffaa00';ctx.lineWidth=3;ctx.stroke();
+      ctx.shadowBlur=0;ctx.fillStyle='#7a5500';ctx.font=`bold ${Math.round(sz*.55)}px Arial`;
+      ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('💎',0,1);
+    } else {
+      if(o.type==='rock'){ctx.fillStyle='#7a7a7a';ctx.beginPath();ctx.ellipse(0,0,sz/2,sz/2,0,0,Math.PI*2);ctx.fill();}
+      else{ctx.fillStyle=o.isPowerup?'#44ffff':'#44aaff';ctx.fillRect(-sz/2,-sz/3,sz,sz*.65);}
+    }
+    ctx.restore();
+    // 塑料瓶道具：闪烁光晕和🍾图标
+    if(o.type==='bottle'&&o.isPowerup&&!o.hit){
+      const pulse=Math.sin(Date.now()*.005)*.5+.5;
+      ctx.save();
+      ctx.globalAlpha=0.25+pulse*0.35;ctx.strokeStyle='#00ffff';ctx.lineWidth=3;
+      ctx.beginPath();ctx.arc(o.x,o.y,o.w*0.85+pulse*4,0,Math.PI*2);ctx.stroke();
+      ctx.globalAlpha=0.7+pulse*0.3;
+      ctx.font=`bold ${Math.round(o.w*0.7)}px Arial`;ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillStyle='#00ffff';ctx.shadowColor='#00ffff';ctx.shadowBlur=10;
+      ctx.fillText('🍾',o.x,o.y-o.h*0.6);ctx.restore();
+    }
+    // 闪电道具：脉冲外圈
+    if(o.type==='lightningpickup'&&!o.hit){
+      const pulse=Math.sin(Date.now()*.007)*.5+.5;
+      ctx.save();
+      ctx.globalAlpha=0.3+pulse*0.4;ctx.strokeStyle='#ffe566';ctx.lineWidth=3;
+      ctx.beginPath();ctx.arc(o.x,o.y,o.w*0.85+pulse*5,0,Math.PI*2);ctx.stroke();
+      ctx.restore();
+    }
   }
 }
 
@@ -662,6 +1046,46 @@ function drawBall(){
   const img=IMGS['ball_'+activeId]||IMGS.ball_classic||null;
   if(img){ctx.save();ctx.translate(ball.x,ball.y);ctx.rotate(ball.spin);ctx.drawImage(img,-ball.r,-ball.r,ball.r*2,ball.r*2);ctx.restore();}
   else{ctx.save();ctx.translate(ball.x,ball.y);ctx.beginPath();ctx.arc(0,0,ball.r,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.restore();}
+  // 🌈 彩虹：绘制第二球（更醒目：彩虹轨迹 + 大光晕 + 标签）
+  if(rainbowBall2&&rainbowBall2.active){
+    const r2=ball.r*1.2; // 第二球比原球稍大
+    // 彩虹轨迹
+    const RAINBOW_COLS=['#ff0044','#ff8800','#ffee00','#44ff44','#00aaff','#aa44ff'];
+    if(rainbowBall2.trail){
+      for(let i=0;i<rainbowBall2.trail.length;i++){
+        const t=i/rainbowBall2.trail.length;
+        const col=RAINBOW_COLS[i%RAINBOW_COLS.length];
+        ctx.save();ctx.globalAlpha=t*0.55;
+        ctx.beginPath();ctx.arc(rainbowBall2.trail[i].x,rainbowBall2.trail[i].y,r2*t*0.6,0,Math.PI*2);
+        ctx.fillStyle=col;ctx.fill();ctx.restore();
+      }
+    }
+    // 球体本身
+    ctx.save();
+    ctx.globalAlpha=0.92;
+    ctx.shadowColor='#ff88ff';ctx.shadowBlur=22;
+    ctx.translate(rainbowBall2.x,rainbowBall2.y);ctx.rotate(rainbowBall2.spin);
+    const img2=IMGS['ball_rainbow']||IMGS.ball_classic||null;
+    if(img2)ctx.drawImage(img2,-r2,-r2,r2*2,r2*2);
+    else{ctx.beginPath();ctx.arc(0,0,r2,0,Math.PI*2);ctx.fillStyle='#ff88ff';ctx.fill();}
+    ctx.restore();
+    // 彩虹光环（旋转）
+    const hueAngle=(Date.now()*0.003)%(Math.PI*2);
+    ctx.save();ctx.globalAlpha=0.5;
+    const grad=ctx.createConicalGradient?null:null; // fallback arc rings
+    for(let i=0;i<6;i++){
+      const a=hueAngle+i/6*Math.PI*2;
+      ctx.strokeStyle=RAINBOW_COLS[i];ctx.lineWidth=2.5;ctx.globalAlpha=0.4;
+      ctx.beginPath();ctx.arc(rainbowBall2.x,rainbowBall2.y,r2+5+i*1.5,a,a+Math.PI/3);ctx.stroke();
+    }
+    ctx.restore();
+    // 标签
+    ctx.save();ctx.globalAlpha=0.9;
+    ctx.font='bold 11px Arial';ctx.textAlign='center';ctx.textBaseline='bottom';
+    ctx.fillStyle='#ff88ff';ctx.shadowColor='#000';ctx.shadowBlur=4;
+    ctx.fillText('幽灵球',rainbowBall2.x,rainbowBall2.y-r2-4);
+    ctx.restore();
+  }
 }
 // ── 脚部绘制 ──
 // 图片：453x352，脚趾朝左下，小腿在右上
