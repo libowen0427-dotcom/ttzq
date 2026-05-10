@@ -372,7 +372,7 @@ let skillPending=false;
 let sk_zDone=0,sk_zTimer=0;
 let sk_bounceCount=0;
 let sk_spiralDone=false;
-let sk_meteorAccel=0;
+let sk_meteorAccel=0,sk_meteorOrigSpd=0;
 let sk_snakeT=0;
 let sk_worldBullet=false,sk_worldReady=false,sk_worldOrigSpd=0;
 let sk_teleportDone=false,sk_teleportTimer=0;
@@ -381,7 +381,7 @@ let sk_bananaCurve=0,sk_bananaDone=false;
 // 场地金币
 let nextFieldCoinShot=0;
 
-const WALL=14,POST=7,POST_H=8,POWER=1.0,MAX_DRAG=90;
+const WALL=14,POST=7,POST_H=8,POWER=1.3,MAX_DRAG=90;
 const ball={x:0,y:0,vx:0,vy:0,r:16,active:false,spin:0};
 const drag={on:false,x:0,y:0};
 const sling={x:0,y:0};
@@ -396,19 +396,19 @@ function initGame(){
   gameActive=true;gamePaused=false;state='idle';
   obstacles=[];particles=[];ballTrail=[];shakeAmt=0;shX=0;shY=0;goalDirX=1;
   keeperEmotion='idle';keeperEmotionT=0;footAlpha=0;legCharging=false;footPwr=0;lastShotLeft=false;teammate=null;
-  enemy=null;nextEnemyShot=5+Math.floor(Math.random()*2);
+  enemy=null;nextEnemyShot=10;
   ballSpeedMult=1.0;
   nextBottleShot=4+Math.floor(Math.random()*3);    // 水瓶：4-6发后首次出现
   nextLightningPickupShot=2+Math.floor(Math.random()*2); // 闪电：2-3发后首次出现
   iceWalls=[];iceBouncedThisShot=false;lightningSlowMult=1.0;lightningBounceCount=0;lightningCrashed=false;
   rainbowBall2=null;gemCoinSpawned=false;bottleUsedThisGame=false;lightningPickupUsed=false;
   activeSkill=null;skillPending=false;
-  sk_zDone=0;sk_zTimer=0;sk_bounceCount=0;sk_spiralDone=false;sk_meteorAccel=0;sk_snakeT=0;
+  sk_zDone=0;sk_zTimer=0;sk_bounceCount=0;sk_spiralDone=false;sk_meteorAccel=0;sk_meteorOrigSpd=0;sk_snakeT=0;
   sk_worldBullet=false;sk_worldReady=false;sk_worldOrigSpd=0;sk_teleportDone=false;sk_teleportTimer=0;
   sk_splitDone=false;sk_splitBalls=[];sk_bananaCurve=0;sk_bananaDone=false;
   hideSkillPanel();
   nextFieldCoinShot=4+Math.floor(Math.random()*2);
-  goalW=Math.min(W*.62,270);goalH=Math.min(H*.26,155);
+  goalW=Math.min(W*.46,200);goalH=Math.min(H*.19,115);
   goalX=W*.5-goalW/2;goalY=H*.06;
   sling.x=W*.5;sling.y=H*.80;
   document.getElementById('hint').style.opacity='1';
@@ -434,7 +434,7 @@ function resetBall(){
   updateWindUI();
   spawnObstacles();
   // 每球重置技能运行时状态，但保留本局选好的 activeSkill
-  sk_zDone=0;sk_zTimer=0;sk_bounceCount=0;sk_spiralDone=false;sk_meteorAccel=0;sk_snakeT=0;
+  sk_zDone=0;sk_zTimer=0;sk_bounceCount=0;sk_spiralDone=false;sk_meteorAccel=0;sk_meteorOrigSpd=0;sk_snakeT=0;
   sk_worldBullet=false;sk_worldReady=false;sk_worldOrigSpd=0;sk_teleportDone=false;sk_teleportTimer=0;
   sk_splitDone=false;sk_splitBalls=[];sk_bananaDone=false;
   // 世界技能每球重新激活等待状态
@@ -567,8 +567,7 @@ function spawnEnemy(){
   }while(tries<100&&(ey<goalY+goalH+60||Math.hypot(ex-sling.x,ey-sling.y)<100));
   enemy={x:ex,y:ey,w:58,h:82,active:true,vx:(Math.random()-.5)*1.2,vy:0,moveT:0};
   flash('⚠️ 对手出现！小心阻截！','#ff4444');
-  nextEnemyShot=shotCount+5+Math.floor(Math.random()*2);
-}
+  nextEnemyShot=shotCount+5+Math.floor(Math.random()*2);}
 function checkEnemySpawn(){
   if(state==='gameover')return;
   if((!enemy||!enemy.active)&&shotCount>=nextEnemyShot){
@@ -1078,8 +1077,11 @@ function updateSkillPhysics(dt){
     }
   }
   if(sk==='meteor'){
+    if(sk_meteorOrigSpd===0)sk_meteorOrigSpd=Math.hypot(ball.vx,ball.vy)||1;
     sk_meteorAccel+=dt*0.00012;
-    ball.vx*=(1+sk_meteorAccel);ball.vy*=(1+sk_meteorAccel);
+    const meteorSpd=Math.hypot(ball.vx,ball.vy);
+    const meteorMax=sk_meteorOrigSpd*2.5;
+    if(meteorSpd<meteorMax){ball.vx*=(1+sk_meteorAccel);ball.vy*=(1+sk_meteorAccel);}
   }
   if(sk==='snake'){
     sk_snakeT+=dt*0.012;
