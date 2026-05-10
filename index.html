@@ -418,10 +418,6 @@ function initGame(){
   if(IMGS.scoreBox) document.getElementById('score-bg-img').src=IMGS.scoreBox.src;
   if(IMGS.goalToast) document.getElementById('goal-float-img').src=IMGS.goalToast.src;
   updateHUD();resetBall();resetKeeper();applyLevel();
-  // 游戏开始时弹出技能选择（每局一次）
-  skillPending=true;
-  gameActive=false;
-  showSkillPanel();
 }
 function resetBall(){
   ball.x=sling.x;ball.y=sling.y;
@@ -445,6 +441,12 @@ function resetBall(){
   if(activeSkill==='world')sk_worldReady=true;
   // 香蕉每球重新设置弯曲方向
   if(activeSkill==='banana')sk_bananaCurve=(Math.random()>.5?1:-1)*0.018;
+  // 第一发结束后弹出技能选择（每局只弹一次）
+  if(shotCount>=1&&!activeSkill&&!skillPending&&state!=='gameover'){
+    skillPending=true;
+    gameActive=false;
+    showSkillPanel();
+  }
 }
 function resetKeeper(){
   keeper.x=goalX+goalW/2-keeper.w/2;keeper.y=goalY+goalH-keeper.h;
@@ -796,8 +798,6 @@ function inputUp(){
   lastShotLeft=(sling.x-drag.x)>0;
   footAlpha=1.0;footPwr=0;
   shotCount++;
-  // 世界技能：发射后立刻进入子弹时间
-  if(activeSkill==='world')setTimeout(()=>activateWorldBulletTime(),80);
   const newLevel=Math.floor(shotCount/3)+1;
   if(newLevel>level){level=newLevel;const lb=document.getElementById('level-box');const skillName=activeSkill?SKILLS.find(s=>s.id===activeSkill)?.name:'未选';lb.textContent='LV '+level+'  ⚡'+skillName;lb.style.color=level>=6?'#ff6b6b':level>=4?'#ffd700':'#7fffaa';applyLevel();motiv('🔥 LV'+level+' 升级！');}
   setTimeout(()=>{
@@ -1044,16 +1044,19 @@ function aimToGoal(){
   ball.vx=dx/dist*spd;ball.vy=dy/dist*spd;
 }
 // 世界技能：发射后自动进入子弹时间，点击一次改变方向并恢复正常速度
-function activateWorldBulletTime(){
-  if(sk_worldBullet||!sk_worldReady)return;
-  sk_worldOrigSpd=Math.hypot(ball.vx,ball.vy);
-  sk_worldBullet=true;
-  ball.vx*=0.06;ball.vy*=0.06;
-  flash('🌍 子弹时间！点击屏幕改变方向！','#ffd700');
-}
+// 世界技能：第一次点击进入子弹时间，第二次点击改变方向
+function activateWorldBulletTime(){} // 保留兼容，不再自动调用
 function skillWorldClick(clientX,clientY){
-  if(!sk_worldReady||!ball.active||!sk_worldBullet)return;
-  // 点击位置 → 新方向，恢复原速度
+  if(!sk_worldReady||!ball.active)return;
+  if(!sk_worldBullet){
+    // 第一次点击：进入子弹时间，记录原速度
+    sk_worldOrigSpd=Math.hypot(ball.vx,ball.vy);
+    sk_worldBullet=true;
+    ball.vx*=0.06;ball.vy*=0.06;
+    flash('🌍 子弹时间！再点击改变方向！','#ffd700');
+    return;
+  }
+  // 第二次点击：改变方向，恢复原速度
   const p=clientPos(clientX,clientY);
   const dx=p.x-ball.x,dy=p.y-ball.y;
   const dist=Math.hypot(dx,dy)||1;
@@ -1520,7 +1523,7 @@ function drawDragGuide(){
   const vx0=dx/MAX_DRAG*pwr*21*POWER,vy0=dy/MAX_DRAG*pwr*21*POWER;
   ctx.save();ctx.setLineDash([5,9]);ctx.strokeStyle='rgba(255,255,150,.28)';ctx.lineWidth=1.8;
   ctx.beginPath();let px=sling.x,py=sling.y,pvx=vx0,pvy=vy0;ctx.moveTo(px,py);
-  for(let i=0;i<40;i++){pvy+=.32;px+=pvx;py+=pvy;if(px-ball.r<=WALL){px=WALL+ball.r;pvx=Math.abs(pvx)*.86;}if(px+ball.r>=W-WALL){px=W-WALL-ball.r;pvx=-Math.abs(pvx)*.86;}if(py>H)break;ctx.lineTo(px,py);}
+  for(let i=0;i<35;i++){pvy+=.32;px+=pvx;py+=pvy;if(px-ball.r<=WALL){px=WALL+ball.r;pvx=Math.abs(pvx)*.86;}if(px+ball.r>=W-WALL){px=W-WALL-ball.r;pvx=-Math.abs(pvx)*.86;}if(py>H)break;ctx.lineTo(px,py);}
   ctx.stroke();ctx.setLineDash([]);ctx.restore();
 }
 function drawParticles(){
