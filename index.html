@@ -68,9 +68,20 @@ h1.title{color:#ffd700;font-size:30px;font-weight:900;text-shadow:0 2px 12px #00
 .tut-skip{background:rgba(255,255,255,.1);color:rgba(255,255,255,.6);border:none;padding:5px 12px;border-radius:10px;font-size:11px;cursor:pointer;margin-top:5px;font-family:inherit;}
 .tut-highlight{position:absolute;border-radius:50%;border:3px solid #ffd700;animation:tutPulse 1s ease-in-out infinite;pointer-events:none;}
 @keyframes tutPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,215,0,.5)}50%{box-shadow:0 0 0 10px rgba(255,215,0,0)}}
+#skill-panel{position:absolute;inset:0;z-index:55;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,.82);pointer-events:auto;}
+#skill-panel h2{color:#ffd700;font-size:17px;font-weight:900;margin-bottom:3px;text-shadow:0 2px 8px #000;letter-spacing:1px;}
+#skill-panel .sp-sub{color:rgba(255,255,255,.5);font-size:11px;margin-bottom:12px;}
+#skill-panel .sp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;width:min(90vw,320px);}
+.sp-card{background:rgba(20,20,50,.9);border:2px solid rgba(255,255,255,.15);border-radius:13px;padding:9px 5px 7px;text-align:center;cursor:pointer;transition:border-color .12s,transform .1s,background .12s;}
+.sp-card:active{transform:scale(.93);}
+.sp-card:hover{border-color:#ffd700;background:rgba(255,215,0,.1);}
+.sp-card img{width:58px;height:58px;object-fit:contain;display:block;margin:0 auto 4px;border-radius:8px;}
+.sp-name{color:#fff;font-size:10px;font-weight:900;line-height:1.3;}
+.sp-desc{color:rgba(120,210,255,.85);font-size:8.5px;margin-top:2px;line-height:1.35;}
 </style>
 </head>
 <body>
+<div id="debug" style="position:fixed;top:40px;left:4px;z-index:999;background:rgba(0,0,0,.85);color:#0f0;font:11px monospace;padding:6px 10px;border-radius:6px;pointer-events:none;"><span id="debug-info">Loading...</span></div>
 <canvas id="c"></canvas>
 <div id="hud">
   <div id="score-wrap">
@@ -93,6 +104,11 @@ h1.title{color:#ffd700;font-size:30px;font-weight:900;text-shadow:0 2px 12px #00
 <div id="power-bar"><div id="power-fill"></div></div>
 
 <div id="tutorial-overlay" style="display:none;"></div>
+<div id="skill-panel">
+  <h2>⚡ 选择本局技能</h2>
+  <div class="sp-sub">每局只选一次，整局生效！</div>
+  <div class="sp-grid" id="skill-grid"></div>
+</div>
 
 <div class="ov" id="register-screen" style="display:none;">
   <h1 class="title">⚽ 天天足球</h1>
@@ -135,26 +151,41 @@ h1.title{color:#ffd700;font-size:30px;font-weight:900;text-shadow:0 2px 12px #00
 </div>
 
 <script>
+// ── 错误诊断 ──
+window.onerror=(msg,src,line,col,err)=>{
+  const d=document.getElementById('debug');
+  if(d){d.innerHTML+='<div style="color:#f44">ERR: '+msg+' (line '+line+')</div>';d.style.display='block';}
+};
+
 // ═══════ IMAGES ═══════
 const IMG_SRC={
-  bg:"踢球样式/bj.png",
-  goalImg:"踢球样式/goal.png",
-  robotIdle:"踢球样式/keeper_idle.png",
-  robotDive:"踢球样式/keeper_dive.png",
-  robotAngry:"踢球样式/keeper_angry.png",
-  robotDizzy:"踢球样式/keeper_dizzy.png",
-  goalToast:"踢球样式/goal_toast.png",
-  scoreBox:"踢球样式/score_box.png",
-  ball_classic:"踢球样式/ball_classic.png",
+  bg:"assets/bj.png",
+  goalImg:"assets/goal.png",
+  robotIdle:"assets/keeper_idle.png",
+  robotDive:"assets/keeper_dive.png",
+  robotAngry:"assets/keeper_angry.png",
+  robotDizzy:"assets/keeper_dizzy.png",
+  goalToast:"assets/goal_toast.png",
+  scoreBox:"assets/score_box.png",
+  ball_classic:"assets/ball_classic.png",
   ball_fire:"skin/ball_fire.png",
   ball_ice:"skin/ball_ice.png",
   ball_lightning:"skin/ball_lightning.png",
   ball_rainbow:"skin/ball_rainbow.png",
   ball_gem:"skin/ball_gem.png",
-  foot:"踢球样式/foot.png",
-  rockImg:"踢球样式/rock.png",
-  bottleImg:"踢球样式/bottle.png",
-  teammateImg:"踢球样式/teammate.png"
+  foot:"assets/foot.png",
+  rockImg:"assets/rock.png",
+  bottleImg:"assets/bottle.png",
+  teammateImg:"assets/teammate.png",
+  sk_z:"skin/z字闪射.png",
+  sk_bounce:"skin/弹射乱反.png",
+  sk_split:"skin/分裂射门.png",
+  sk_spiral:"skin/回旋飞球.png",
+  sk_meteor:"skin/流星重炮.png",
+  sk_snake:"skin/蛇形突进.png",
+  sk_world:"skin/世界.png",
+  sk_teleport:"skin/瞬移球.png",
+  sk_banana:"skin/香蕉大弧线.png"
 };
 const IMGS={};
 function loadImages(cb){
@@ -210,7 +241,7 @@ const TUT_STEPS=[
     pos:'center',next:'明白了！'
   },
   {
-    html:'<div class="tut-title">🪨 石头障碍</div>球碰到<b>石头</b>会弹向球门方向！弹射进球得分 <b>×10</b>！',
+    html:'<div class="tut-title">🪨 石头障碍</div>球碰到<b>石头</b>会弹向球门方向！弹射进球得分 <b>×4</b>！',
     pos:'top',next:'下一步'
   },
   {
@@ -324,7 +355,33 @@ let bottleUsedThisGame=false; // 保留兼容（不再用）
 let lightningPickupUsed=false; // 保留兼容（不再用）
 let nextLightningPickupShot=0; // 闪电道具下次出现的回合（每3-4发）
 
-const WALL=14,POST=7,POST_H=8,POWER=1.65,MAX_DRAG=90;
+// ── 9技能系统 ──
+const SKILLS=[
+  {id:'z',      name:'z字闪射',   imgKey:'sk_z',       desc:'飞行中突然两次变向'},
+  {id:'bounce', name:'弹射乱反',  imgKey:'sk_bounce',  desc:'弹射加速，三弹后自动找球门'},
+  {id:'split',  name:'分裂射门',  imgKey:'sk_split',   desc:'飞行途中分裂成3个球'},
+  {id:'spiral', name:'回旋飞球',  imgKey:'sk_spiral',  desc:'绕圈吸附道具后冲向球门'},
+  {id:'meteor', name:'流星重炮',  imgKey:'sk_meteor',  desc:'越来越快且不受石块偏移'},
+  {id:'snake',  name:'蛇形突进',  imgKey:'sk_snake',   desc:'不断左右摆动前进'},
+  {id:'world',  name:'世界',      imgKey:'sk_world',   desc:'发射后可二次改变方向+子弹时间'},
+  {id:'teleport',name:'瞬移球',   imgKey:'sk_teleport',desc:'飞行中突然闪现一段距离'},
+  {id:'banana', name:'香蕉大弧线',imgKey:'sk_banana',  desc:'足球大幅弯曲飞行'},
+];
+let activeSkill=null;
+let skillPending=false;
+let sk_zDone=0,sk_zTimer=0;
+let sk_bounceCount=0;
+let sk_spiralDone=false;
+let sk_meteorAccel=0;
+let sk_snakeT=0;
+let sk_worldBullet=false,sk_worldReady=false,sk_worldOrigSpd=0;
+let sk_teleportDone=false,sk_teleportTimer=0;
+let sk_splitDone=false,sk_splitBalls=[];
+let sk_bananaCurve=0,sk_bananaDone=false;
+// 场地金币
+let nextFieldCoinShot=0;
+
+const WALL=14,POST=7,POST_H=8,POWER=1.0,MAX_DRAG=90;
 const ball={x:0,y:0,vx:0,vy:0,r:16,active:false,spin:0};
 const drag={on:false,x:0,y:0};
 const sling={x:0,y:0};
@@ -339,11 +396,18 @@ function initGame(){
   gameActive=true;gamePaused=false;state='idle';
   obstacles=[];particles=[];ballTrail=[];shakeAmt=0;shX=0;shY=0;goalDirX=1;
   keeperEmotion='idle';keeperEmotionT=0;footAlpha=0;legCharging=false;footPwr=0;lastShotLeft=false;teammate=null;
+  enemy=null;nextEnemyShot=5+Math.floor(Math.random()*2);
   ballSpeedMult=1.0;
   nextBottleShot=4+Math.floor(Math.random()*3);    // 水瓶：4-6发后首次出现
   nextLightningPickupShot=2+Math.floor(Math.random()*2); // 闪电：2-3发后首次出现
   iceWalls=[];iceBouncedThisShot=false;lightningSlowMult=1.0;lightningBounceCount=0;lightningCrashed=false;
   rainbowBall2=null;gemCoinSpawned=false;bottleUsedThisGame=false;lightningPickupUsed=false;
+  activeSkill=null;skillPending=false;
+  sk_zDone=0;sk_zTimer=0;sk_bounceCount=0;sk_spiralDone=false;sk_meteorAccel=0;sk_snakeT=0;
+  sk_worldBullet=false;sk_worldReady=false;sk_worldOrigSpd=0;sk_teleportDone=false;sk_teleportTimer=0;
+  sk_splitDone=false;sk_splitBalls=[];sk_bananaCurve=0;sk_bananaDone=false;
+  hideSkillPanel();
+  nextFieldCoinShot=4+Math.floor(Math.random()*2);
   goalW=Math.min(W*.62,270);goalH=Math.min(H*.26,155);
   goalX=W*.5-goalW/2;goalY=H*.06;
   sling.x=W*.5;sling.y=H*.80;
@@ -354,7 +418,10 @@ function initGame(){
   if(IMGS.scoreBox) document.getElementById('score-bg-img').src=IMGS.scoreBox.src;
   if(IMGS.goalToast) document.getElementById('goal-float-img').src=IMGS.goalToast.src;
   updateHUD();resetBall();resetKeeper();applyLevel();
-  // 初始障碍物由resetBall→spawnObstacles生成
+  // 游戏开始时弹出技能选择（每局一次）
+  skillPending=true;
+  gameActive=false;
+  showSkillPanel();
 }
 function resetBall(){
   ball.x=sling.x;ball.y=sling.y;
@@ -363,16 +430,21 @@ function resetBall(){
   if(state!=='gameover')state='idle';
   drag.on=false;footAlpha=0;legCharging=false;footPwr=0;rockBounced=false;bottleTriple=false;
   iceBouncedThisShot=false;lightningBounceCount=0;rainbowBall2=null;
-  // gemCoinSpawned 不在此重置，金币保留到被击中
-  // 激活上一回合留下的 pending 冰墙
   iceWalls.forEach(iw=>{if(iw.pending)iw.pending=false;});
   sling.x=W*.5;sling.y=H*.80;
   ball.x=sling.x;ball.y=sling.y;
   document.getElementById('power-bar').style.display='none';
   wind=level>=3?(Math.random()-.5)*.003*(level-1.5):0;
   updateWindUI();
-  // 发球前预生成障碍物（每次重置球时重新生成）
   spawnObstacles();
+  // 每球重置技能运行时状态，但保留本局选好的 activeSkill
+  sk_zDone=0;sk_zTimer=0;sk_bounceCount=0;sk_spiralDone=false;sk_meteorAccel=0;sk_snakeT=0;
+  sk_worldBullet=false;sk_worldReady=false;sk_worldOrigSpd=0;sk_teleportDone=false;sk_teleportTimer=0;
+  sk_splitDone=false;sk_splitBalls=[];sk_bananaDone=false;
+  // 世界技能每球重新激活等待状态
+  if(activeSkill==='world')sk_worldReady=true;
+  // 香蕉每球重新设置弯曲方向
+  if(activeSkill==='banana')sk_bananaCurve=(Math.random()>.5?1:-1)*0.018;
 }
 function resetKeeper(){
   keeper.x=goalX+goalW/2-keeper.w/2;keeper.y=goalY+goalH-keeper.h;
@@ -386,10 +458,9 @@ function applyLevel(){
   // 障碍物由spawnObstacles负责，此处只设移动参数
 }
 function spawnObstacles(){
-  // 每次发球前重新生成障碍物，冰墙和金币跨回合保留
-  // 先保存还没被击中的金币
   const survivingGemCoin=obstacles.find(o=>o.type==='gemcoin'&&!o.hit)||null;
   const survivingLightningPickup=obstacles.find(o=>o.type==='lightningpickup'&&!o.hit)||null;
+  const survivingFieldCoin=obstacles.find(o=>o.type==='fieldcoin'&&!o.hit)||null;
   obstacles=[];
   if(level>=4){
     const n=Math.min(level-3,5),safe={x:sling.x-90,y:sling.y-170,w:180,h:170};
@@ -413,6 +484,12 @@ function spawnObstacles(){
   }
   // 恢复未被拾取的闪电道具
   if(survivingLightningPickup)obstacles.push(survivingLightningPickup);
+  if(survivingFieldCoin){
+    obstacles.push(survivingFieldCoin);
+  } else if(shotCount>=nextFieldCoinShot){
+    spawnFieldCoin();
+    nextFieldCoinShot=shotCount+4+Math.floor(Math.random()*2);
+  }
   // 塑料瓶：每4-6发出一个（场上最多同时1个）
   const bottleOnField=obstacles.some(o=>o.type==='bottle'&&o.isPowerup&&!o.hit);
   if(!bottleOnField && shotCount>=nextBottleShot){
@@ -474,27 +551,84 @@ function spawnLightningPickup(){
   flash('⚡ 闪电道具出现！触碰得分×3！','#ffe566');
 }
 
-// 队友系统
+// ── 敌对系统（替换队友系统）──
 let teammate=null;
-function spawnTeammate(){
-  if(teammate)return;
-  // 随机位置，避开球和弹弓
-  let tx,ty,tries=0;
+let enemy=null;
+let nextEnemyShot=0;
+function spawnEnemy(){
+  if(enemy&&enemy.active)return;
+  let ex,ey,tries=0;
   do{
-    tx=W*(.1+Math.random()*.8);
-    ty=H*(.35+Math.random()*.45);
+    ex=W*(.1+Math.random()*.8);
+    ey=H*(.28+Math.random()*.48);
     tries++;
-  }while(tries<100&&Math.hypot(tx-sling.x,ty-sling.y)<120);
-  teammate={x:tx,y:ty,w:55,h:80,hasball:false,shootT:0,active:true};
-  flash('队友出现！传球给他！','#7fffaa');
+  }while(tries<100&&(ey<goalY+goalH+60||Math.hypot(ex-sling.x,ey-sling.y)<100));
+  enemy={x:ex,y:ey,w:58,h:82,active:true,vx:(Math.random()-.5)*1.2,vy:0,moveT:0};
+  flash('⚠️ 对手出现！小心阻截！','#ff4444');
+  nextEnemyShot=shotCount+5+Math.floor(Math.random()*2);
 }
-function checkTeammateSpawn(){
-  if(lives===1&&!teammate&&state!=='gameover'){spawnTeammate();}
+function checkEnemySpawn(){
+  if(state==='gameover')return;
+  if((!enemy||!enemy.active)&&shotCount>=nextEnemyShot){
+    spawnEnemy();
+  }
+}
+function updateEnemy(dt){
+  if(!enemy||!enemy.active)return;
+  // 左右巡逻，遇墙反向
+  enemy.moveT+=dt;
+  enemy.x+=enemy.vx*dt*0.08;
+  if(enemy.x<W*.08){enemy.x=W*.08;enemy.vx=Math.abs(enemy.vx);}
+  if(enemy.x>W*.92){enemy.x=W*.92;enemy.vx=-Math.abs(enemy.vx);}
+  // 如果球飞向自己区域，移动拦截
+  if(ball.active&&state==='flying'){
+    const dx=ball.x-enemy.x;
+    enemy.x+=Math.sign(dx)*Math.min(Math.abs(dx)*0.04,1.5);
+  }
+}
+function checkEnemyCollision(){
+  if(!enemy||!enemy.active||!ball.active)return;
+  if(circRect(ball.x,ball.y,ball.r,enemy.x-enemy.w/2,enemy.y-enemy.h*.8,enemy.w,enemy.h*.8)){
+    // 球被对手拦截：反弹
+    ball.vx=-ball.vx*0.6;
+    ball.vy=Math.abs(ball.vy)*0.4;
+    enemy.active=false;enemy=null;
+    addBurst(ball.x,ball.y,'#ff4444',16,5);
+    flash('❌ 被对手拦截！','#ff4444');shakeAmt=8;
+  }
+}
+function drawEnemy(){
+  if(!enemy||!enemy.active)return;
+  const tx=enemy.x,ty=enemy.y;
+  const blink=Math.sin(Date.now()*.007)*.25+.75;
+  ctx.save();ctx.globalAlpha=blink;
+  // 用红色方块代表对手（若有图可换成图片）
+  ctx.fillStyle='#cc2222';
+  ctx.beginPath();
+  // 身体
+  ctx.roundRect(tx-enemy.w/2,ty-enemy.h,enemy.w,enemy.h,6);
+  ctx.fill();
+  // 头部
+  ctx.fillStyle='#ff6666';
+  ctx.beginPath();ctx.arc(tx,ty-enemy.h-14,14,0,Math.PI*2);ctx.fill();
+  // 眼睛
+  ctx.fillStyle='#fff';
+  ctx.beginPath();ctx.arc(tx-5,ty-enemy.h-16,4,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(tx+5,ty-enemy.h-16,4,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#000';
+  ctx.beginPath();ctx.arc(tx-5,ty-enemy.h-15,2,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(tx+5,ty-enemy.h-15,2,0,Math.PI*2);ctx.fill();
+  // 头顶警告
+  ctx.globalAlpha=blink;
+  ctx.fillStyle='#ff4444';ctx.font='bold 16px Arial';ctx.textAlign='center';
+  ctx.fillText('⚠️',tx,ty-enemy.h-34);
+  ctx.restore();
 }
 function updateHUD(){
   document.getElementById('score-num').textContent=score;
   document.getElementById('coin-count').textContent=player?.coins||0;
-  document.getElementById('level-box').textContent='LV '+level+'  📌'+shotCount+'发';
+  const skillName=activeSkill?SKILLS.find(s=>s.id===activeSkill)?.name:'未选';
+  document.getElementById('level-box').textContent='LV '+level+'  ⚡'+skillName;
   renderHearts();
 }
 function renderHearts(){
@@ -512,7 +646,16 @@ function updateWindUI(){
   if(level>=3&&Math.abs(wind)>.0008){el.style.display='block';el.textContent='风 '+(wind>0?'→':'←')+' '+(Math.abs(wind)<.0018?'微风':Math.abs(wind)<.0028?'中风':'强风');}
   else el.style.display='none';
 }
-function checkCoins(){while(score-coinScoreAccum>=50){coinScoreAccum+=50;awardCoin();}}
+function checkCoins(){}
+function spawnFieldCoin(){
+  const safe={x:sling.x-90,y:sling.y-170,w:180,h:170};
+  let tries=0,ox,oy;
+  do{ox=W*(.12+Math.random()*.76);oy=H*(.22+Math.random()*.52);tries++;}
+  while(tries<120&&((ox>safe.x&&ox<safe.x+safe.w&&oy>safe.y&&oy<safe.y+safe.h)||oy<goalY+goalH+40));
+  const sz=28+Math.random()*10;
+  obstacles.push({x:ox,y:oy,w:sz,h:sz,type:'fieldcoin',ang:0,glowT:1,vx:0,vy:0,hit:false});
+  flash('🪙 金币出现！快拾取！','#ffd700');
+}
 function awardCoin(){
   if(!player)return;player.coins++;coinsThisGame++;savePlayer();
   document.getElementById('coin-count').textContent=player.coins;
@@ -563,7 +706,7 @@ function onGoal(){
   const bonus=Math.min(bounceCount,6);
   let pts;
   if(rockBounced){
-    pts=Math.pow(2,Math.min(bounceCount,5))*10;
+    pts=Math.pow(2,Math.min(bounceCount,5))*4;
     pts=Math.min(pts,999);
   } else {
     pts=Math.pow(2,Math.min(bounceCount,5));
@@ -602,7 +745,7 @@ function onMiss(){
   state='miss';lives--;addBurst(ball.x,ball.y,'#ff4455',12,3);
   renderHearts();shakeAmt=10;
   if(lives<=0)setTimeout(onGameOver,950);
-  else{flash('MISS!','#ff6666');checkTeammateSpawn();setTimeout(()=>{resetBall();resetKeeper();},950);}
+  else{flash('MISS!','#ff6666');setTimeout(()=>{resetBall();resetKeeper();},950);}
 }
 function onKeeperSave(){setKeeperEmotion('angry',1800);onMiss();}
 function onGameOver(){
@@ -615,6 +758,7 @@ function onGameOver(){
 // ── 输入处理 ──
 function clientPos(cx2,cy2){const r=cv.getBoundingClientRect();return{x:cx2-r.left,y:cy2-r.top};}
 function inputDown(clientX,clientY){
+  if(activeSkill==='world'&&ball.active){skillWorldClick(clientX,clientY);return;}
   if(!gameActive||state!=='idle')return;
   const p=clientPos(clientX,clientY);
   if(p.y>H*.42){
@@ -647,19 +791,15 @@ function inputUp(){
         rainbowBall2={x:sx2,y:sy2,vx:vx2,vy:vy2,spin:0,active:true,trail:[]};
     },300);
   }
-  // 队友持球时继承之前的弹射次数，否则重置
-  if(teammate&&teammate.active&&teammate.hasball){
-    bounceCount=teammate.savedBounce||0;
-    rockBounced=teammate.savedRock||false;
-  } else {
-    bounceCount=0;
-  }
+  bounceCount=0;rockBounced=false;
   footAngle=Math.atan2(ball.vy,ball.vx);
   lastShotLeft=(sling.x-drag.x)>0;
   footAlpha=1.0;footPwr=0;
   shotCount++;
+  // 世界技能：发射后立刻进入子弹时间
+  if(activeSkill==='world')setTimeout(()=>activateWorldBulletTime(),80);
   const newLevel=Math.floor(shotCount/3)+1;
-  if(newLevel>level){level=newLevel;const lb=document.getElementById('level-box');lb.textContent='LV '+level+'  📌'+shotCount+'发';lb.style.color=level>=6?'#ff6b6b':level>=4?'#ffd700':'#7fffaa';applyLevel();motiv('🔥 LV'+level+' 升级！');}
+  if(newLevel>level){level=newLevel;const lb=document.getElementById('level-box');const skillName=activeSkill?SKILLS.find(s=>s.id===activeSkill)?.name:'未选';lb.textContent='LV '+level+'  ⚡'+skillName;lb.style.color=level>=6?'#ff6b6b':level>=4?'#ffd700':'#7fffaa';applyLevel();motiv('🔥 LV'+level+' 升级！');}
   setTimeout(()=>{
     if(state==='flying'){
       const bx=ball.x+ball.vx*6,dir=bx>keeper.x+keeper.w/2?1:-1;
@@ -715,7 +855,7 @@ function update(dt){
 
   // ── 彩虹足球：第二球物理更新 ──
   if(rainbowBall2&&rainbowBall2.active){
-    rainbowBall2.vy+=.32;rainbowBall2.vx+=wind*dt;
+    rainbowBall2.vy+=.08;rainbowBall2.vx+=wind*dt;
     rainbowBall2.x+=rainbowBall2.vx;rainbowBall2.y+=rainbowBall2.vy;
     rainbowBall2.spin+=rainbowBall2.vx*.04;
     // 彩虹轨迹
@@ -754,7 +894,8 @@ function update(dt){
   }
 
   if(ball.active&&(state==='flying'||state==='teammate_shot')){state='flying';
-    ball.vy+=.32;ball.vx+=wind*dt;ball.x+=ball.vx;ball.y+=ball.vy;ball.spin+=ball.vx*.04;
+    ball.vy+=.08;ball.vx+=wind*dt;ball.x+=ball.vx;ball.y+=ball.vy;ball.spin+=ball.vx*.04;
+    updateSkillPhysics(dt);
     if(ballTrail.length>16)ballTrail.shift();ballTrail.push({x:ball.x,y:ball.y,spd:Math.hypot(ball.vx,ball.vy)});
 
     // ── 墙壁碰撞 ──
@@ -797,7 +938,7 @@ function update(dt){
         ball.vx=Math.cos(upBias)*spd*.9;ball.vy=Math.sin(upBias)*spd*.9;
         o.glowT=1;bounceCount++;
         addBurst(ball.x,ball.y,'#aaa',10,4);addBurst(ball.x,ball.y,'#fff',4,5);
-        shakeAmt=6;rockBounced=true;flash('岩石弹射！x10！','#ff8800');
+        shakeAmt=6;rockBounced=true;flash('岩石弹射！x4！','#ff8800');
         o.hit=true;
         onBounce();
       } else if(o.type==='gemcoin'){
@@ -822,37 +963,30 @@ function update(dt){
         addBurst(ball.x,ball.y,'#44aaff',16,5);addBurst(ball.x,ball.y,'#ffffff',8,7);addBurst(ball.x,ball.y,'#ffd700',12,6);
         shakeAmt=5;flash('🍾 塑料瓶！得分 ×3！','#44ffff');motiv('🍾 ×3 加倍！');
         bounceCount++;onBounce();
+      } else if(o.type==='fieldcoin'){
+        o.hit=true;
+        addBurst(ball.x,ball.y,'#ffd700',18,5);addBurst(ball.x,ball.y,'#fff700',10,7);
+        shakeAmt=4;motiv('🪙 金币！');awardCoin();
       }
     }
 
-    // 检查传给队友
-    if(teammate&&teammate.active&&!teammate.hasball){
-      if(circRect(ball.x,ball.y,ball.r,teammate.x-teammate.w/2,teammate.y-teammate.h*.8,teammate.w,teammate.h)){
-        teammate.hasball=true;teammate.savedBounce=bounceCount;teammate.savedRock=rockBounced;
-        ball.active=false;ball.vx=0;ball.vy=0;
-        sling.x=teammate.x;sling.y=teammate.y-teammate.h*.3;
-        ball.x=sling.x;ball.y=sling.y;state='idle';
-        flash('队友接球！拖拽继续射门！','#7fffaa');
-      }
-    }
+    // 检查对手拦截
+    checkEnemyCollision();
     if(ball.y>H+60)onMiss();
   }
   updateKeeper(dt);
-  // 被打飞的瓶子（兼容旧逻辑，已无普通瓶，保留安全）
+  updateEnemy(dt);
+  checkEnemySpawn();
+  updateSplitBalls(dt);
   for(const o of (obstacles||[])){
     if(o.glowT>0)o.glowT=Math.max(0,o.glowT-dt*.003);
   }
-  if(teammate&&teammate.active&&teammate.hasball&&state==='flying'){
-    teammate.hasball=false;teammate.active=false;teammate=null;
-  }
-  checkTeammateSpawn();
   for(let i=(particles||[]).length-1;i>=0;i--){const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.vy+=p.g;p.vx*=.96;p.life-=.022;if(p.life<=0)particles.splice(i,1);}
 }
 
 // ── 碰撞发生后的技能响应 ──
 function onBounce(){
   const skin=player?.activeBall||'classic';
-  // 闪电足球：每次弹射减缓守门员
   if(skin==='lightning'){
     lightningBounceCount++;
     if(lightningBounceCount>=5&&!lightningCrashed){
@@ -863,6 +997,187 @@ function onBounce(){
       flash('⚡ 守门员减速！×'+lightningBounceCount,'#ffe566');
     }
   }
+  if(activeSkill==='bounce'){
+    sk_bounceCount++;
+    const spd=Math.hypot(ball.vx,ball.vy);
+    ball.vx=ball.vx/spd*(spd*1.18);ball.vy=ball.vy/spd*(spd*1.18);
+    if(sk_bounceCount>=3){
+      const gx=goalX+goalW/2,gy=goalY+goalH/2;
+      const dx=gx-ball.x,dy=gy-ball.y,dist=Math.hypot(dx,dy)||1;
+      const spd2=Math.hypot(ball.vx,ball.vy);
+      ball.vx=dx/dist*spd2;ball.vy=dy/dist*spd2;
+      flash('🔄 自动找门！','#7fffaa');motiv('🔄 锁定球门！');
+    } else {
+      flash('🔄 弹射加速！（'+(3-sk_bounceCount)+'次后锁定球门）','#7fffaa');
+    }
+  }
+}
+
+// ══════════ 技能系统 ══════════
+function showSkillPanel(){
+  const panel=document.getElementById('skill-panel');
+  const grid=document.getElementById('skill-grid');
+  grid.innerHTML='';
+  SKILLS.forEach(sk=>{
+    const card=document.createElement('div');
+    card.className='sp-card';
+    const img=IMGS[sk.imgKey];
+    card.innerHTML=`<img src="${img?img.src:''}" alt="${sk.name}"><div class="sp-name">${sk.name}</div><div class="sp-desc">${sk.desc}</div>`;
+    card.onclick=()=>selectSkill(sk.id);
+    grid.appendChild(card);
+  });
+  panel.style.display='flex';
+}
+function hideSkillPanel(){
+  document.getElementById('skill-panel').style.display='none';
+}
+function selectSkill(id){
+  activeSkill=id;skillPending=false;
+  hideSkillPanel();gameActive=true;
+  const sk=SKILLS.find(s=>s.id===id);
+  flash('✅ 本局技能：'+sk.name+'  '+sk.desc,'#ffd700');
+}
+function aimToGoal(){
+  const gx=goalX+goalW/2,gy=goalY+goalH/2;
+  const dx=gx-ball.x,dy=gy-ball.y,dist=Math.hypot(dx,dy)||1;
+  const spd=Math.hypot(ball.vx,ball.vy);
+  ball.vx=dx/dist*spd;ball.vy=dy/dist*spd;
+}
+// 世界技能：发射后自动进入子弹时间，点击一次改变方向并恢复正常速度
+function activateWorldBulletTime(){
+  if(sk_worldBullet||!sk_worldReady)return;
+  sk_worldOrigSpd=Math.hypot(ball.vx,ball.vy);
+  sk_worldBullet=true;
+  ball.vx*=0.06;ball.vy*=0.06;
+  flash('🌍 子弹时间！点击屏幕改变方向！','#ffd700');
+}
+function skillWorldClick(clientX,clientY){
+  if(!sk_worldReady||!ball.active||!sk_worldBullet)return;
+  // 点击位置 → 新方向，恢复原速度
+  const p=clientPos(clientX,clientY);
+  const dx=p.x-ball.x,dy=p.y-ball.y;
+  const dist=Math.hypot(dx,dy)||1;
+  ball.vx=dx/dist*sk_worldOrigSpd;
+  ball.vy=dy/dist*sk_worldOrigSpd;
+  sk_worldBullet=false;sk_worldReady=false;sk_worldOrigSpd=0;
+  flash('🌍 方向已改变！','#7fffaa');
+  addBurst(ball.x,ball.y,'#7fffaa',20,6);
+}
+function updateSkillPhysics(dt){
+  if(!ball.active||!activeSkill)return;
+  const sk=activeSkill;
+  if(sk==='z'){
+    sk_zTimer+=dt;
+    if(sk_zDone<2&&sk_zTimer>400*(sk_zDone+1)){
+      sk_zDone++;ball.vx=-ball.vx*0.9;
+      aimToGoal();
+      addBurst(ball.x,ball.y,'#ffe566',12,5);flash('⚡ Z字变向→找球门！','#ffe566');
+    }
+  }
+  if(sk==='meteor'){
+    sk_meteorAccel+=dt*0.00012;
+    ball.vx*=(1+sk_meteorAccel);ball.vy*=(1+sk_meteorAccel);
+  }
+  if(sk==='snake'){
+    sk_snakeT+=dt*0.012;
+    const perp=Math.cos(sk_snakeT)*0.55;
+    const spd=Math.hypot(ball.vx,ball.vy)||1;
+    const nx=ball.vy/spd,ny=-ball.vx/spd;
+    ball.vx+=nx*perp;ball.vy+=ny*perp;
+    // 每半周期自动瞄准球门修正方向
+    if(Math.abs(Math.cos(sk_snakeT))<0.05){aimToGoal();}
+  }
+  if(sk==='banana'){
+    ball.vx+=sk_bananaCurve*Math.hypot(ball.vx,ball.vy);
+    // 香蕉弯曲到一定程度后自动找球门
+    if(!sk_bananaDone&&Math.abs(ball.vx)>Math.abs(ball.vy)*2.5){
+      sk_bananaDone=true;aimToGoal();
+      flash('🍌 香蕉曲线→找球门！','#ffd700');
+    }
+  }
+  if(sk==='teleport'&&!sk_teleportDone){
+    sk_teleportTimer+=dt;
+    if(sk_teleportTimer>380){
+      sk_teleportDone=true;
+      addBurst(ball.x,ball.y,'#aaffff',16,6);
+      const dist=90+Math.random()*50;
+      const spd=Math.hypot(ball.vx,ball.vy)||1;
+      ball.x+=ball.vx/spd*dist;ball.y+=ball.vy/spd*dist;
+      ball.x=Math.max(WALL+ball.r,Math.min(W-WALL-ball.r,ball.x));
+      aimToGoal();
+      addBurst(ball.x,ball.y,'#ffffff',14,5);flash('✨ 瞬移→找球门！','#aaffff');
+    }
+  }
+  if(sk==='split'&&!sk_splitDone){
+    sk_splitDone=true;
+    for(let i=0;i<2;i++){
+      const ang=(i===0?0.3:-0.3);
+      const cos=Math.cos(ang),sin2=Math.sin(ang);
+      sk_splitBalls.push({x:ball.x,y:ball.y,vx:ball.vx*cos-ball.vy*sin2,vy:ball.vx*sin2+ball.vy*cos,spin:0,active:true,trail:[]});
+    }
+    flash('💥 分裂！','#ff88ff');addBurst(ball.x,ball.y,'#ff88ff',20,7);
+  }
+  if(sk==='spiral'&&!sk_spiralDone){
+    const hasItems=obstacles.some(o=>!o.hit&&(o.type==='bottle'||o.type==='lightningpickup'||o.type==='fieldcoin'));
+    if(hasItems){
+      sk_spiralDone=true;
+      obstacles.forEach(o=>{
+        if(!o.hit&&(o.type==='bottle'||o.type==='lightningpickup'||o.type==='fieldcoin')){
+          o.hit=true;
+          if(o.type==='bottle'||o.type==='lightningpickup')bottleTriple=true;
+          if(o.type==='fieldcoin')awardCoin();
+          addBurst(o.x,o.y,'#ffd700',10,4);
+        }
+      });
+      const gx=goalX+goalW/2,gy=goalY+goalH/2;
+      const dx=gx-ball.x,dy=gy-ball.y;
+      const spd=Math.hypot(ball.vx,ball.vy)||8;
+      const dist=Math.hypot(dx,dy)||1;
+      ball.vx=dx/dist*spd*1.1;ball.vy=dy/dist*spd*1.1;
+      flash('🌀 回旋吸附！冲向球门！','#aaffff');motiv('🌀 磁吸！');
+    }
+  }
+}
+function updateSplitBalls(dt){
+  if(!sk_splitBalls.length)return;
+  for(let i=sk_splitBalls.length-1;i>=0;i--){
+    const b=sk_splitBalls[i];
+    if(!b.active){sk_splitBalls.splice(i,1);continue;}
+    b.vy+=.08;b.x+=b.vx;b.y+=b.vy;b.spin+=b.vx*.04;
+    if(!b.trail)b.trail=[];
+    if(b.trail.length>12)b.trail.shift();
+    b.trail.push({x:b.x,y:b.y});
+    if(b.x-ball.r<=WALL){b.x=WALL+ball.r;b.vx=Math.abs(b.vx)*.86;}
+    if(b.x+ball.r>=W-WALL){b.x=W-WALL-ball.r;b.vx=-Math.abs(b.vx)*.86;}
+    if(b.y>H+60){b.active=false;continue;}
+    if(b.x>goalX+POST&&b.x<goalX+goalW-POST&&b.y>goalY+POST_H&&b.y<goalY+goalH){
+      const kh=keeperHitbox();
+      if(!lightningCrashed&&circRect(b.x,b.y,ball.r,kh.x,kh.y,kh.w,kh.h)){b.active=false;}
+      else{
+        b.active=false;score+=1;
+        const sn=document.getElementById('score-num');sn.textContent=score;
+        sn.classList.remove('pop');void sn.offsetWidth;sn.classList.add('pop');
+        addStars(b.x,b.y);addBurst(b.x,b.y,'#ff88ff',20,6);motiv('💥 分裂球进！');
+        if(player){if(score>player.bestScore){player.bestScore=score;savePlayer();}}
+      }
+    }
+  }
+}
+function drawSplitBalls(){
+  if(!sk_splitBalls.length)return;
+  sk_splitBalls.forEach(b=>{
+    if(!b.active)return;
+    for(let i=0;i<(b.trail||[]).length;i++){
+      const t=i/b.trail.length;
+      ctx.beginPath();ctx.arc(b.trail[i].x,b.trail[i].y,ball.r*t*.4,0,Math.PI*2);
+      ctx.fillStyle=`rgba(255,136,255,${t*.2})`;ctx.fill();
+    }
+    const img=IMGS['ball_'+(player?.activeBall||'classic')]||IMGS.ball_classic||null;
+    ctx.save();ctx.globalAlpha=0.85;ctx.translate(b.x,b.y);ctx.rotate(b.spin);
+    if(img)ctx.drawImage(img,-ball.r,-ball.r,ball.r*2,ball.r*2);
+    else{ctx.beginPath();ctx.arc(0,0,ball.r,0,Math.PI*2);ctx.fillStyle='#ff88ff';ctx.fill();}
+    ctx.restore();
+  });
 }
 // 撞墙回调（冰霜生成冰墙标记）- 本次撞墙留下冰墙视觉标记，下一发球才生效
 function onWallBounce(wx,wy){
@@ -983,6 +1298,14 @@ function drawObstacles(){
       ctx.strokeStyle='#ffaa00';ctx.lineWidth=3;ctx.stroke();
       ctx.shadowBlur=0;ctx.fillStyle='#7a5500';ctx.font=`bold ${Math.round(sz*.55)}px Arial`;
       ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('💎',0,1);
+    } else if(o.type==='fieldcoin'){
+      ctx.globalAlpha=1;
+      const pulse=Math.sin(Date.now()*.009)*.35+.65;
+      ctx.shadowColor='#ffd700';ctx.shadowBlur=16+pulse*12;
+      ctx.fillStyle='#ffd700';ctx.beginPath();ctx.arc(0,0,sz/2,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='#ffcc00';ctx.lineWidth=2.5;ctx.stroke();
+      ctx.shadowBlur=0;ctx.font=`bold ${Math.round(sz*.6)}px Arial`;
+      ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🪙',0,1);
     } else {
       if(o.type==='rock'){ctx.fillStyle='#7a7a7a';ctx.beginPath();ctx.ellipse(0,0,sz/2,sz/2,0,0,Math.PI*2);ctx.fill();}
       else{ctx.fillStyle=o.isPowerup?'#44ffff':'#44aaff';ctx.fillRect(-sz/2,-sz/3,sz,sz*.65);}
@@ -1044,7 +1367,9 @@ function drawBall(){
     ctx.fillStyle=`rgba(${tc},${t*.18*spd})`;ctx.fill();
   }
   const img=IMGS['ball_'+activeId]||IMGS.ball_classic||null;
-  if(img){ctx.save();ctx.translate(ball.x,ball.y);ctx.rotate(ball.spin);ctx.drawImage(img,-ball.r,-ball.r,ball.r*2,ball.r*2);ctx.restore();}
+  if(img){ctx.save();ctx.translate(ball.x,ball.y);ctx.rotate(ball.spin);
+    if(activeSkill==='world'&&sk_worldReady){const pulse=Math.sin(Date.now()*.01)*.5+.5;ctx.shadowColor='#ffd700';ctx.shadowBlur=20+pulse*15;}
+    ctx.drawImage(img,-ball.r,-ball.r,ball.r*2,ball.r*2);ctx.restore();}
   else{ctx.save();ctx.translate(ball.x,ball.y);ctx.beginPath();ctx.arc(0,0,ball.r,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.restore();}
   // 🌈 彩虹：绘制第二球（更醒目：彩虹轨迹 + 大光晕 + 标签）
   if(rainbowBall2&&rainbowBall2.active){
@@ -1195,7 +1520,7 @@ function drawDragGuide(){
   const vx0=dx/MAX_DRAG*pwr*21*POWER,vy0=dy/MAX_DRAG*pwr*21*POWER;
   ctx.save();ctx.setLineDash([5,9]);ctx.strokeStyle='rgba(255,255,150,.28)';ctx.lineWidth=1.8;
   ctx.beginPath();let px=sling.x,py=sling.y,pvx=vx0,pvy=vy0;ctx.moveTo(px,py);
-  for(let i=0;i<28;i++){pvy+=.32;px+=pvx;py+=pvy;if(px-ball.r<=WALL){px=WALL+ball.r;pvx=Math.abs(pvx)*.86;}if(px+ball.r>=W-WALL){px=W-WALL-ball.r;pvx=-Math.abs(pvx)*.86;}if(py>H)break;ctx.lineTo(px,py);}
+  for(let i=0;i<40;i++){pvy+=.32;px+=pvx;py+=pvy;if(px-ball.r<=WALL){px=WALL+ball.r;pvx=Math.abs(pvx)*.86;}if(px+ball.r>=W-WALL){px=W-WALL-ball.r;pvx=-Math.abs(pvx)*.86;}if(py>H)break;ctx.lineTo(px,py);}
   ctx.stroke();ctx.setLineDash([]);ctx.restore();
 }
 function drawParticles(){
@@ -1227,11 +1552,14 @@ function loop(t){
   ctx.save();ctx.translate(shX,shY);
   drawBG();drawWalls();drawGoal();drawObstacles();
   drawTeammate();
+  // 绘制对手
+  drawEnemy();
   drawLeg();
   if(ball.y<goalY+goalH)drawBall();
   drawKeeper();
   if(ball.y>=goalY+goalH)drawBall();
   drawDragGuide();drawParticles();drawWind();
+  drawSplitBalls();
   ctx.restore();
   requestAnimationFrame(loop);
 }
@@ -1260,6 +1588,9 @@ onGameOver=function(){_onGameOver();bgmPause();};
 document.addEventListener('pointerdown',bgmPlay,{once:true});
 
 loadImages(()=>{
+  const ok=Object.keys(IMGS).length,total=Object.keys(IMG_SRC).length;
+  const el=document.getElementById('debug-info');
+  if(el)el.textContent='Images loaded: '+ok+'/'+total;
   if(IMGS.scoreBox) document.getElementById('score-bg-img').src=IMGS.scoreBox.src;
   if(IMGS.goalToast) document.getElementById('goal-float-img').src=IMGS.goalToast.src;
   if(!player){show('register-screen');}else{initGame();}
